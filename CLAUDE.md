@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 概要
 
-Anki 風の暗記カードアプリ（`anki-app`）。現状は `create-next-app` の雛形にテスト環境を足しただけの段階で、アプリ固有のコードはまだない。
+Anki 風の暗記カードアプリ「超効率！暗記アプリ」（`anki-app`）。仕様は `docs/暗記アプリ要件定義書_20240125.docx`（機能一覧・画面遷移図は docx 内の画像）。
+
+- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**現在はフェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）まで実装済み**。
+- フェーズ2で残っているもの: 認証（新規登録・ログイン・ログアウト・個人設定・アカウント削除）、カテゴリーの修正・削除、出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）。
 
 ## コマンド
 
@@ -39,15 +42,60 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
   - `@/lib/supabase/client` の `createClient()` — Client Component（`"use client"`）用。
 - 起動時の接続チェック: `src/instrumentation.ts` の `register()` が Node.js ランタイムでのみ `checkSupabaseConnection()`（`src/lib/supabase/checkConnection.ts`）を実行する。`/auth/v1/health` に publishable キーを付けて問い合わせるので、テーブルがなくても確認できる。**失敗時のみ** `console.error` でログを出し、成功時は何も出さない方針。
 - セッション更新用の `proxy.ts`（旧 middleware）はまだ用意していない。認証機能を追加するときに Supabase 公式の Next.js ガイドに沿って追加すること。
-- 純粋な関数のテストは `*.test.ts` で置いてよい（例: `src/lib/supabase/checkConnection.test.ts`）。Supabase への通信は外部依存なので `vi.stubGlobal("fetch", ...)` などでモックする。
+
+### データベース
+
+- スキーマ変更は Supabase MCP の `apply_migration` で行い、同じ SQL を `supabase/migrations/<version>_<name>.sql` に保存する（version は `list_migrations` で確認）。変更後は `get_advisors`（security）を確認し、`generate_typescript_types` で `src/lib/supabase/database.types.ts` を再生成する。
+- テーブル:
+  - `categories` — `name` は一意・1〜50 文字。
+  - `questions` — `category_id`（`categories` への FK、`on delete restrict`）、`question` / `answer`（1〜1000 文字）、`url`（null か `http(s)://`）、`review_phase`（1〜4）、`next_review_on`（date）、`created_at`、`updated_at`（トリガーで自動更新）。
+  - 制約 `questions_next_review_on_consistency`: **`review_phase = 4` のときだけ `next_review_on` が null**。更新時は両方をセットで変えること。
+- 入力値の制約はアプリ側（`src/lib/validation.ts`）と DB の check 制約の両方にある。上限を変えるときは両方を直す。
+- **RLS は anon ロールに全許可（`using (true)`）している**。フェーズ1は認証なしのため。フェーズ2で認証を入れるときは `user_id` 列を追加し、`auth.uid()` で絞るポリシーに置き換えること（Server Action 側でも利用者確認を追加する）。カテゴリーの削除を実装するときは FK の `on delete restrict` の扱いも決める。
+- エラーコードの扱い: `23505`（一意制約違反）→ カテゴリー名の重複メッセージ、`22P02`（不正な UUID）→ 存在しない問題として `notFound()`。
+
+## アーキテクチャ
+
+```
+src/app/                 ページ（App Router）と Server Actions（各ディレクトリの actions.ts）
+  page.tsx               問題一覧 /
+  questions/new|[id]|[id]/edit   問題作成・詳細・修正（修正画面は ?from=detail で戻り先を切り替え）
+  categories/            カテゴリー一覧・登録
+  review/                復習（今日の問題）
+src/components/          画面の UI（Client Component 中心）。データとアクションは props で受け取る
+src/lib/data/questions.ts   Supabase からの取得（DB の行 → アプリの型への変換もここ）
+src/lib/review/          出題日計算（schedule）・正誤判定（judge）・シャッフル（shuffle）。純粋関数
+src/lib/validation.ts    フォーム入力の検証（FormData を受け取る純粋関数）
+src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQuestion など）
+```
+
+- **ページの形**: `page.tsx` は同期コンポーネントにして見出しなどの静的部分を描画し、データ取得は `async` な `〜Loader` コンポーネントに分けて `<Suspense>` で包む（Cache Components では未キャッシュのデータ取得を Suspense の外で行うとエラーになる）。`params` / `searchParams` も Promise なので Loader 内で `await` する。
+- `new Date()` や `Math.random()` をサーバーで使う前には `await connection()`（`next/server`）を呼ぶ（例: `src/app/review/page.tsx`）。
+- **Server Actions** はページから Client Component に props で渡す（テストで差し替えるため）。フォームは `useActionState` を使い、エラー時は `{ errors, values }` を返して入力値を復元する（フォームの `key` に state を渡して作り直している）。成功時は `redirect()`、同じ画面のまま再表示したいときは `refresh()`（`next/cache`）。データはキャッシュしていないので `revalidatePath` などは不要。
+- 引数を `.bind` で Server Action に渡すとクライアントから改ざんできるため、URL などをそのまま受け取らない（例: `updateQuestion` は戻り先を boolean で受け取り、パスはサーバーで組み立てる）。
+- 削除の確認は `window.confirm` を使う。
+
+### 出題日の計算（`src/lib/review/schedule.ts`）
+
+- 日付はすべて**日本時間の `YYYY-MM-DD` 文字列**で扱う（`toTokyoDate()`）。DB の `next_review_on` も日本時間の日付。
+- 作成時はフェーズ1・出題日は作成日の翌日（DB のデフォルト値）。
+- 正解: フェーズ1→2（作成日 + 7 日）、2→3（作成日 + 30 日）、3→4（復習完了、出題日 null）。ただし計算した日がもう過ぎていたら翌日にする。
+- 不正解: フェーズはそのまま、回答日からフェーズ1 = 1 日、2 = 7 日、3 = 30 日後。
+- 「今日の問題」は `next_review_on <= 今日` の問題。解答時のスケジュール更新は、出題日を迎えている問題に限る（二重送信対策）。
+- 正誤判定（`judge.ts`）は NFKC 正規化・前後の空白除去・連続する空白をまとめたうえで完全一致。英字の大文字・小文字は区別する。
+- 解答の判定はサーバー（`src/app/review/actions.ts` の `submitAnswer`）で行い、復習画面のクライアントには正解を渡さない（`ReviewQuestion` 型）。
 
 ## テスト
 
 - Vitest + React Testing Library + jsdom。設定は `vitest.config.mts`、セットアップは `vitest.setup.ts`。
 - パス解決は Vite 組み込みの `resolve.tsconfigPaths: true` を使用（`vite-tsconfig-paths` プラグインは不要なので入れない）。
 - `globals` は無効。`describe` / `test` / `expect` などは `vitest` から明示的に import する。jest-dom マッチャー（`toHaveTextContent` など）と各テスト後の `cleanup()` はセットアップファイルで登録済み。
-- テストファイルは対象と同じディレクトリに `*.test.tsx` として置く（例: `src/app/page.test.tsx`）。
-- `async` な Server Component は Vitest でテストできない（同期コンポーネントのみ対象）。
+- テストファイルは対象と同じディレクトリに `*.test.tsx` として置く（例: `src/app/page.test.tsx`）。純粋な関数のテストは `*.test.ts` でよい（例: `src/lib/review/schedule.test.ts`）。
+- `async` な Server Component は Vitest でテストできない（同期コンポーネントのみ対象）。そのため画面の振る舞いは `src/components/` のコンポーネントに props（データとアクションの偽物）を渡してテストする。
+- 操作は `@testing-library/user-event`（`userEvent.setup()`）で行う。Server Action の代わりは `vi.fn<(…) => Promise<…>>(async () => …)` のように型引数付きで作る（引数を書くと未使用変数の lint 警告になる）。
+- `window.confirm` は `vi.spyOn(window, "confirm").mockReturnValue(true)` で差し替え、`afterEach` で `vi.restoreAllMocks()` する。
+- ページ（`page.tsx`）のテストでは Supabase へのアクセス（`@/lib/data/questions`）を `vi.mock` で解決しない Promise にして、Suspense の外側（見出し・リンク）だけを検証する。Supabase への通信は外部依存なのでモックしてよい（`fetch` なら `vi.stubGlobal`）。
+- 画面遷移は `next/link` の `href` を検証する（例: 「戻る」→ `/`、「問題修正」→ `/questions/[id]/edit?from=detail`）。
 
 ## コーディングルール
 - 変更後は必ず `npm test` でテストが通ることを確認してください
