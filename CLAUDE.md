@@ -30,6 +30,17 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 - `LayoutProps<"/">` などのルート型は Next.js が自動生成するグローバル型（`next dev` / `next build` 時に生成）。
 - パスエイリアス `@/*` → `./src/*`。
 
+## Supabase
+
+- プロジェクト: `anki-app`（ref: `nqdqtpwmhwyevcrshywf`、URL: `https://nqdqtpwmhwyevcrshywf.supabase.co`）。同じ組織に別アプリ用の `task-kanban` プロジェクトもあるため、Supabase MCP を使うときは project_id を取り違えないこと。
+- 環境変数は `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`（キーの一覧は `.env.example`、実際の値は `.env.local`）。キーは旧来の anon キーではなく publishable キー（`sb_publishable_...`）を使う。
+- パッケージは `@supabase/supabase-js` と `@supabase/ssr`。クライアントは用途で使い分ける:
+  - `@/lib/supabase/server` の `createClient()` — Server Component / Server Action / Route Handler 用。`cookies()` を使うため **async**（`await createClient()`）。Server Component から呼ばれた場合、cookie の書き込みは握りつぶしている。
+  - `@/lib/supabase/client` の `createClient()` — Client Component（`"use client"`）用。
+- 起動時の接続チェック: `src/instrumentation.ts` の `register()` が Node.js ランタイムでのみ `checkSupabaseConnection()`（`src/lib/supabase/checkConnection.ts`）を実行する。`/auth/v1/health` に publishable キーを付けて問い合わせるので、テーブルがなくても確認できる。**失敗時のみ** `console.error` でログを出し、成功時は何も出さない方針。
+- セッション更新用の `proxy.ts`（旧 middleware）はまだ用意していない。認証機能を追加するときに Supabase 公式の Next.js ガイドに沿って追加すること。
+- 純粋な関数のテストは `*.test.ts` で置いてよい（例: `src/lib/supabase/checkConnection.test.ts`）。Supabase への通信は外部依存なので `vi.stubGlobal("fetch", ...)` などでモックする。
+
 ## テスト
 
 - Vitest + React Testing Library + jsdom。設定は `vitest.config.mts`、セットアップは `vitest.setup.ts`。
