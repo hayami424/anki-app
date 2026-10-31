@@ -120,6 +120,72 @@ src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQu
 - 変数名・関数名はキャメルケースで書いてください
 - コミットメッセージは日本語で書いてください
 
+## デザインルール
+shadcn/ui の導入方法や技術的な注意点は「技術スタックと注意点」を参照。ここでは画面を作るときの見た目の決まりをまとめる。
+
+### 部品の選び方
+- UI は **shadcn/ui の部品で組み立てる**。素の `<button>` / `<input>` / `<select>` / `<table>` に Tailwind で直接スタイルを当てない。必要な部品がなければ `npx shadcn@latest add <name>` で追加する。
+- `src/components/ui/` のファイルは CLI の生成物として扱い、画面の都合で書き換えない。見た目の調整は使う側の `className` で行う。
+- 対応表:
+  | 用途 | 使う部品 |
+  | --- | --- |
+  | 画面の主要なかたまり（一覧・フォーム・詳細・復習） | `Card`（`CardHeader` / `CardContent` / `CardFooter`） |
+  | ボタン | `Button`。リンクをボタンの見た目にするときは `Link` + `cn(buttonVariants(...))` |
+  | フォーム項目 | `Field` + `FieldLabel` + 入力部品 + `FieldDescription`（補足）/ `FieldError`（エラー）。複数項目は `FieldGroup` で包む |
+  | 入力 | `Input` / `Textarea` / `NativeSelect`（`Select` は使わない） / `Checkbox` |
+  | 一覧表 | `Table` 系 |
+  | 画面全体・フォーム全体のエラー | `Alert variant="destructive"` + `CircleAlert` アイコン |
+  | 状態・分類のラベル | `Badge`（カテゴリーは `variant="outline"`、復習フェーズは `PhaseBadge`） |
+  | 読み込み中 | `LoadingCard`（`Skeleton`） |
+  | 進み具合 | `Progress` |
+
+### ページ構成
+- ページ（`page.tsx`）は `<main className="mx-auto flex w-full max-w-… flex-col gap-6 px-4 py-8 sm:py-10">` で包む。幅は一覧 `max-w-5xl`、詳細 `max-w-3xl`、フォーム・復習など 1 列の画面は `max-w-2xl`。
+- 見出しは必ず `PageHeader`（`title` は `<h1>`、`description` に 1 文の説明、右側の操作ボタンは `actions`）。ページ内で `<h1>` を直接書かない。
+- ヘッダー（`AppHeader`）は `layout.tsx` で全画面共通に表示する。画面間のナビゲーションボタンはヘッダーではなく各ページの `PageHeader` の `actions` やカード下部に置く（テストがページ単位でリンクを検証しているため）。
+- `<Suspense>` の fallback は `LoadingCard` に統一する。
+
+### ボタンとリンク
+- 1 つの画面で **主要な操作（作成・登録・送信・復習スタートなど）は 1 つだけ `variant="default"`**（インディゴ塗り）にする。
+- 「戻る」「カテゴリー」など補助的な遷移は `variant="outline"`、表の行内操作（詳細・修正）や「復習終了」は `variant="ghost"` + `size="sm"`。
+- 削除は `variant="destructive"`（薄い赤背景）。確認は従来どおり `window.confirm`。
+- カードの下部（`CardFooter`）は「戻る」を左、主要な操作を右に置く。
+- ボタンには内容を表す `lucide-react` のアイコンを文字の前に付ける（「次の問題へ」「結果を見る」など先へ進む操作だけは後ろに `ArrowRight`）。主なアイコン: 作成 `Plus`、戻る `ArrowLeft`、修正 `Pencil`、削除 `Trash2`、詳細 `Eye`、復習 `BrainCircuit`、カテゴリー `FolderOpen` / `Folder`、送信 `Send`。
+- ボタン内のアイコンはサイズを指定しない（`Button` が `size-4` にそろえる）。アイコンは装飾なので、アクセシブルな名前は文字で付ける（アイコンだけのボタンにしない）。
+
+### 色
+- 色は **テーマのトークンだけを使う**（`bg-primary` / `text-muted-foreground` / `text-destructive` / `bg-success` / `border` など）。`bg-blue-600` や `text-zinc-600` のような Tailwind の固定色は使わない。新しい意味の色が必要ならトークンを `globals.css` に追加する（例: `--success`）。
+- 意味の割り当て:
+  - `primary`（インディゴ）: 主要な操作、ブランド、進み具合、強調したい数値。
+  - `success`（緑）: 正解、復習完了（フェーズ4）。
+  - `destructive`（赤）: 不正解、削除、エラー。
+  - `muted-foreground`: 補足説明、日付などの二次情報、空の状態の説明文。
+  - `accent`: 解答など、本文の中で区別して見せたい領域の背景。
+- 淡い色の背景は不透明度で作る（`bg-primary/10`、`bg-success/15` など）。復習フェーズは数字が大きいほど濃くする（`PhaseBadge`）。
+
+### 文字と余白
+- 見出しは `PageHeader` の `text-2xl sm:text-3xl font-bold`。カード内の見出しは `CardTitle`。
+- 問題文は大きく太く（詳細 `text-lg font-semibold`、復習 `text-xl font-semibold`）、ラベルは小さく薄く（`text-xs text-muted-foreground`）して、内容を主役にする。
+- 日付や件数などの数字には `tabular-nums` を付ける。複数行入力される問題・解答の表示には `whitespace-pre-wrap` を付ける。
+- 余白は Tailwind のスケールで `gap-*` を使って取る（`space-*` や個別の `margin` より `flex` / `grid` + `gap` を優先）。画面内のカード同士は `gap-6`。
+- 角丸・影はカードと部品の既定値に任せ、独自の `rounded-*` / `shadow-*` を足さない。
+
+### 空の状態・エラー・フィードバック
+- データが 0 件のときは、カードの中央にアイコン（`size-12〜14` の丸背景 + アイコン）、太字の一文、薄い補足文、必要なら次の操作へのボタンを並べる（`QuestionList` / `ReviewSession` を参照）。
+- 入力エラーは項目の下に `FieldError` で出し、`Field` に `data-invalid`、入力部品に `aria-invalid` を付けて枠を赤くする。保存失敗などフォーム全体のエラーは先頭に `Alert` で出す。
+- 正誤や完了などの結果は、色だけでなくアイコンと文字（「○ 正解」「× 不正解」）でも伝える。
+
+### レスポンシブ
+- スマートフォン幅（390px 程度）でページ全体が横にスクロールしないこと。横に長い表はカードの中で横スクロールさせる（`Table` が自動で包む）。
+- 横並びは `flex-wrap` で折り返せるようにする。幅の切り替えは `sm:` 以上で行う（モバイルを基準に書く）。
+
+### テストとの両立
+- デザインを変えるときも、テストが参照するラベル文言・ボタン名・リンク名・要素の役割（`role`）は変えない。`getByText` は 1 つの要素の直下の文字で一致を見るため、「今日の問題は 2 問です」「あなたの解答：…」のような文を `<span>` で分割して装飾しない。
+- `Alert` と `FieldError` は `role="alert"` を持つ。1 画面に同時に複数出るとテストの `getByRole("alert")` が失敗するので、エラー表示を増やすときは注意する。
+
+### 確認方法
+- 見た目を変えたら、Playwright MCP で該当画面をデスクトップ幅とスマートフォン幅（390px）の両方でスクリーンショットを撮って確認する。
+
 ## テストルール
 - 網羅性: 正常系・異常系・境界値を検討してください
 - 可読性: テスト名に条件と期待する結果を明示してください
