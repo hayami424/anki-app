@@ -30,6 +30,17 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 - **Next.js 16 / React 19 / App Router**。学習データ上の Next.js とは API や規約が異なる可能性があるため、コードを書く前に `node_modules/next/dist/docs/` の該当ガイドを確認すること（AGENTS.md 参照）。
 - **Cache Components が有効**（`next.config.ts` の `cacheComponents: true` + `partialPrefetching: true`）。データ取得はデフォルトで動的になり、キャッシュしたい箇所に `use cache` / `cacheLife` / `cacheTag` を使う方式。route segment config の `runtime` export は使えない。旧来の `revalidate` などの書き方を持ち込まないこと（`docs/01-app/02-guides/migrating-to-cache-components.md` 参照）。
 - **Tailwind CSS v4 は PostCSS ではなく Turbopack ローダー経由**で読み込んでいる（`next.config.ts` の `turbopack.rules` で `*.css` に `@tailwindcss/turbopack` を適用）。`postcss.config` や `tailwind.config` は存在しない。テーマ変数は `src/app/globals.css` の `@theme inline` で定義。
+- **shadcn/ui** を導入済み（設定は `components.json`）。スタイルは `base-nova`（Radix ではなく **Base UI**（`@base-ui/react`）ベース）、基本色 neutral、アイコンは `lucide-react`。
+  - 部品の追加は `npx shadcn@latest add <name>`。生成先は `src/components/ui/`（CLI が管理するファイルなので、画面固有の UI は `src/components/` 直下に置く）。
+  - クラス名の結合は `@/lib/utils` の `cn()`（中身は shadcn 公式の `cn` パッケージ。clsx / tailwind-merge は入れていない）。
+  - テーマは `globals.css` の CSS 変数（`--primary` など）で定義し、`@theme inline` で Tailwind の色に割り当てている。色は `bg-primary` / `text-muted-foreground` などのトークンを使う。
+  - ダークモードは `.dark` クラス方式（`@custom-variant dark`）。現在 `dark` クラスを付ける仕組みはないため常にライト表示。
+  - `shadcn init` は `--font-sans: var(--font-sans)` という自己参照を書き込むことがある。`--font-sans` は `var(--font-geist-sans), var(--font-noto-sans-jp), sans-serif` にすること（日本語は `layout.tsx` で読み込む Noto Sans JP で補う）。
+  - アクセント色（`--primary`）はインディゴ。正解表示などに使う成功色として独自トークン `--success` / `--success-foreground`（`bg-success` など）を追加している。
+  - `Link` をボタンの見た目にするときは `className={cn(buttonVariants({ ... }))}` と **必ず `cn()` で包む**（cva は結合するだけなので、`border-transparent` と `border-border` のような競合が解決されず outline の枠線が消える）。Base UI の `Button` に `render={<Link />}` を渡すと `role="button"` になりリンクとして扱われないため使わない。
+  - 画面共通の部品: `AppHeader`（layout のヘッダー）、`PageHeader`（見出し・説明・操作ボタン）、`LoadingCard`（Suspense の fallback）、`PhaseBadge`（復習フェーズの表示）。
+  - `<select>` は shadcn の `native-select` を使う（テストで `user.selectOptions` を使うため、Base UI の `Select` にはしない）。
+  - `globals.css` を変更しても起動中の `next dev` に反映されないことがある。その場合は dev サーバーを再起動する。
 - `LayoutProps<"/">` などのルート型は Next.js が自動生成するグローバル型（`next dev` / `next build` 時に生成）。
 - パスエイリアス `@/*` → `./src/*`。
 
@@ -63,6 +74,8 @@ src/app/                 ページ（App Router）と Server Actions（各ディ
   categories/            カテゴリー一覧・登録
   review/                復習（今日の問題）
 src/components/          画面の UI（Client Component 中心）。データとアクションは props で受け取る
+src/components/ui/       shadcn/ui の部品（CLI で生成）
+src/lib/utils.ts         cn()（shadcn/ui 用のクラス名結合）
 src/lib/data/questions.ts   Supabase からの取得（DB の行 → アプリの型への変換もここ）
 src/lib/review/          出題日計算（schedule）・正誤判定（judge）・シャッフル（shuffle）。純粋関数
 src/lib/validation.ts    フォーム入力の検証（FormData を受け取る純粋関数）

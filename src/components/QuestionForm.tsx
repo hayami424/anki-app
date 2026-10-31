@@ -1,7 +1,22 @@
 "use client";
 
+import { ArrowLeft, CircleAlert } from "lucide-react";
 import Link from "next/link";
 import { useActionState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import type { Category } from "@/lib/types";
 import type { QuestionFieldErrors, QuestionFormValues } from "@/lib/validation";
 
@@ -20,17 +35,6 @@ type Props = {
 
 const emptyValues: QuestionFormValues = { categoryId: "", question: "", answer: "", url: "" };
 
-const inputClassName = "rounded border border-zinc-300 px-2 py-1.5";
-
-function FieldError({ id, message }: { id: string; message?: string }) {
-  if (!message) return null;
-  return (
-    <p id={id} className="text-sm text-red-600">
-      {message}
-    </p>
-  );
-}
-
 export function QuestionForm({
   categories,
   action,
@@ -45,96 +49,101 @@ export function QuestionForm({
 
   return (
     // エラー後に入力値を復元するため、送信結果ごとにフォームを作り直す
-    <form key={JSON.stringify(state)} action={formAction} className="flex flex-col gap-4">
-      {errors.form && (
-        <p role="alert" className="text-sm text-red-600">
-          {errors.form}
-        </p>
-      )}
+    <form key={JSON.stringify(state)} action={formAction}>
+      <Card>
+        <CardContent>
+          <FieldGroup>
+            {errors.form && (
+              <Alert variant="destructive">
+                <CircleAlert />
+                <AlertDescription>{errors.form}</AlertDescription>
+              </Alert>
+            )}
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="categoryId">カテゴリー</label>
-        <select
-          id="categoryId"
-          name="categoryId"
-          className={inputClassName}
-          defaultValue={values.categoryId}
-          aria-invalid={errors.categoryId ? true : undefined}
-          aria-describedby={errors.categoryId ? "categoryId-error" : undefined}
-        >
-          <option value="">選択してください</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        <FieldError id="categoryId-error" message={errors.categoryId} />
-        {!hasCategories && (
-          <p className="text-sm text-zinc-600">
-            カテゴリーがありません。{" "}
-            <Link className="text-blue-600 underline" href="/categories">
-              カテゴリーを登録する
-            </Link>
-          </p>
-        )}
-      </div>
+            <Field data-invalid={errors.categoryId ? true : undefined}>
+              <FieldLabel htmlFor="categoryId">カテゴリー</FieldLabel>
+              <NativeSelect
+                id="categoryId"
+                name="categoryId"
+                className="w-full sm:w-72"
+                defaultValue={values.categoryId}
+                aria-invalid={errors.categoryId ? true : undefined}
+                aria-describedby={errors.categoryId ? "categoryId-error" : undefined}
+              >
+                <NativeSelectOption value="">選択してください</NativeSelectOption>
+                {categories.map((category) => (
+                  <NativeSelectOption key={category.id} value={category.id}>
+                    {category.name}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <FieldError id="categoryId-error">{errors.categoryId}</FieldError>
+              {!hasCategories && (
+                <FieldDescription>
+                  カテゴリーがありません。{" "}
+                  <Link href="/categories">カテゴリーを登録する</Link>
+                </FieldDescription>
+              )}
+            </Field>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="question">問題</label>
-        <textarea
-          id="question"
-          name="question"
-          rows={3}
-          className={inputClassName}
-          defaultValue={values.question}
-          aria-invalid={errors.question ? true : undefined}
-          aria-describedby={errors.question ? "question-error" : undefined}
-        />
-        <FieldError id="question-error" message={errors.question} />
-      </div>
+            <Field data-invalid={errors.question ? true : undefined}>
+              <FieldLabel htmlFor="question">問題</FieldLabel>
+              <Textarea
+                id="question"
+                name="question"
+                rows={3}
+                placeholder="例：江戸幕府を開いたのは？"
+                defaultValue={values.question}
+                aria-invalid={errors.question ? true : undefined}
+                aria-describedby={errors.question ? "question-error" : undefined}
+              />
+              <FieldError id="question-error">{errors.question}</FieldError>
+            </Field>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="answer">解答</label>
-        <textarea
-          id="answer"
-          name="answer"
-          rows={2}
-          className={inputClassName}
-          defaultValue={values.answer}
-          aria-invalid={errors.answer ? true : undefined}
-          aria-describedby={errors.answer ? "answer-error" : undefined}
-        />
-        <FieldError id="answer-error" message={errors.answer} />
-      </div>
+            <Field data-invalid={errors.answer ? true : undefined}>
+              <FieldLabel htmlFor="answer">解答</FieldLabel>
+              <Textarea
+                id="answer"
+                name="answer"
+                rows={2}
+                placeholder="例：徳川家康"
+                defaultValue={values.answer}
+                aria-invalid={errors.answer ? true : undefined}
+                aria-describedby={errors.answer ? "answer-error" : undefined}
+              />
+              <FieldDescription>
+                復習では、この解答と完全に一致したときに正解になります
+              </FieldDescription>
+              <FieldError id="answer-error">{errors.answer}</FieldError>
+            </Field>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="url">参考URL（任意）</label>
-        <input
-          id="url"
-          name="url"
-          type="text"
-          inputMode="url"
-          className={inputClassName}
-          defaultValue={values.url}
-          aria-invalid={errors.url ? true : undefined}
-          aria-describedby={errors.url ? "url-error" : undefined}
-        />
-        <FieldError id="url-error" message={errors.url} />
-      </div>
+            <Field data-invalid={errors.url ? true : undefined}>
+              <FieldLabel htmlFor="url">参考URL（任意）</FieldLabel>
+              <Input
+                id="url"
+                name="url"
+                type="text"
+                inputMode="url"
+                placeholder="https://"
+                defaultValue={values.url}
+                aria-invalid={errors.url ? true : undefined}
+                aria-describedby={errors.url ? "url-error" : undefined}
+              />
+              <FieldError id="url-error">{errors.url}</FieldError>
+            </Field>
+          </FieldGroup>
+        </CardContent>
 
-      <div className="flex gap-3">
-        <Link className="rounded border border-zinc-300 px-4 py-2" href={cancelHref}>
-          戻る
-        </Link>
-        <button
-          type="submit"
-          className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-40"
-          disabled={!hasCategories || isPending}
-        >
-          {submitLabel}
-        </button>
-      </div>
+        <CardFooter className="justify-between gap-2">
+          <Link className={cn(buttonVariants({ variant: "outline" }))} href={cancelHref}>
+            <ArrowLeft />
+            戻る
+          </Link>
+          <Button type="submit" disabled={!hasCategories || isPending}>
+            {submitLabel}
+          </Button>
+        </CardFooter>
+      </Card>
     </form>
   );
 }

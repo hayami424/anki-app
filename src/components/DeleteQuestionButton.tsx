@@ -1,6 +1,8 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
 
 type Props = {
   id: string;
@@ -22,19 +24,15 @@ export function DeleteQuestionButton({ id, deleteQuestionAction }: Props) {
 
   return (
     <>
-      <button
-        type="button"
-        className="rounded bg-red-600 px-4 py-2 text-white disabled:opacity-40"
-        disabled={isPending}
-        onClick={handleClick}
-      >
-        削除
-      </button>
       {error && (
-        <p role="alert" className="w-full text-sm text-red-600">
+        <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}
+      <Button type="button" variant="destructive" disabled={isPending} onClick={handleClick}>
+        <Trash2 />
+        削除
+      </Button>
     </>
   );
 }

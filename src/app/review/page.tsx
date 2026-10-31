@@ -1,5 +1,7 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
+import { LoadingCard } from "@/components/LoadingCard";
+import { PageHeader } from "@/components/PageHeader";
 import { ReviewSession } from "@/components/ReviewSession";
 import { getDueQuestions } from "@/lib/data/questions";
 import { toTokyoDate } from "@/lib/review/schedule";
@@ -20,9 +22,9 @@ async function ReviewSessionLoader() {
 
 export default function ReviewPage() {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
-      <h1 className="text-2xl font-bold">復習（今日の問題）</h1>
-      <Suspense fallback={<p className="text-zinc-600">読み込み中...</p>}>
+    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8 sm:py-10">
+      <PageHeader title="復習（今日の問題）" description="出題日を迎えた問題に解答して記憶を定着させましょう" />
+      <Suspense fallback={<LoadingCard />}>
         <ReviewSessionLoader />
       </Suspense>
     </main>

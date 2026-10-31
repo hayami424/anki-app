@@ -1,7 +1,25 @@
 "use client";
 
+import { CircleAlert, Eye, Inbox, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { PhaseBadge } from "@/components/PhaseBadge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { Category, Question } from "@/lib/types";
 
 type SortKey = "createdDesc" | "createdAsc" | "nextReviewAsc" | "nextReviewDesc";
@@ -84,118 +102,164 @@ export function QuestionList({ questions, categories, deleteQuestionsAction }: P
   }
 
   if (questions.length === 0) {
-    return <p className="text-zinc-600">問題がまだ登録されていません</p>;
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Inbox className="size-6" />
+          </span>
+          <div className="flex flex-col gap-1">
+            <p className="font-medium">問題がまだ登録されていません</p>
+            <p className="text-sm text-muted-foreground">
+              「問題作成」から最初の問題を登録しましょう
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          カテゴリーで絞り込み
-          <select
-            className="rounded border border-zinc-300 px-2 py-1"
+    <Card className="gap-0 py-0">
+      <div className="flex flex-wrap items-end gap-3 border-b p-4">
+        <Field className="w-auto gap-1.5">
+          <FieldLabel htmlFor="categoryFilter" className="text-xs text-muted-foreground">
+            カテゴリーで絞り込み
+          </FieldLabel>
+          <NativeSelect
+            id="categoryFilter"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
-            <option value="all">すべて</option>
+            <NativeSelectOption value="all">すべて</NativeSelectOption>
             {categories.map((category) => (
-              <option key={category.id} value={category.id}>
+              <NativeSelectOption key={category.id} value={category.id}>
                 {category.name}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          復習フェーズで絞り込み
-          <select
-            className="rounded border border-zinc-300 px-2 py-1"
+          </NativeSelect>
+        </Field>
+        <Field className="w-auto gap-1.5">
+          <FieldLabel htmlFor="phaseFilter" className="text-xs text-muted-foreground">
+            復習フェーズで絞り込み
+          </FieldLabel>
+          <NativeSelect
+            id="phaseFilter"
             value={phaseFilter}
             onChange={(e) => setPhaseFilter(e.target.value)}
           >
-            <option value="all">すべて</option>
+            <NativeSelectOption value="all">すべて</NativeSelectOption>
             {phaseOptions.map((phase) => (
-              <option key={phase} value={String(phase)}>
+              <NativeSelectOption key={phase} value={String(phase)}>
                 フェーズ{phase}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          並び替え
-          <select
-            className="rounded border border-zinc-300 px-2 py-1"
+          </NativeSelect>
+        </Field>
+        <Field className="w-auto gap-1.5">
+          <FieldLabel htmlFor="sortKey" className="text-xs text-muted-foreground">
+            並び替え
+          </FieldLabel>
+          <NativeSelect
+            id="sortKey"
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
           >
             {sortOptions.map((option) => (
-              <option key={option.value} value={option.value}>
+              <NativeSelectOption key={option.value} value={option.value}>
                 {option.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <button
+          </NativeSelect>
+        </Field>
+        <Button
           type="button"
-          className="ml-auto rounded bg-red-600 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+          variant="destructive"
+          className="ml-auto"
           disabled={idsToDelete.length === 0 || isPending}
           onClick={handleDelete}
         >
+          <Trash2 />
           選択した問題を削除
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-red-600">
-          {error}
-        </p>
+        <div className="border-b p-4">
+          <Alert variant="destructive">
+            <CircleAlert />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
       )}
 
       {visibleQuestions.length === 0 ? (
-        <p className="text-zinc-600">条件に一致する問題がありません</p>
+        <p className="p-10 text-center text-sm text-muted-foreground">
+          条件に一致する問題がありません
+        </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-300">
-              <tr>
-                <th className="p-2">選択</th>
-                <th className="p-2">作成日</th>
-                <th className="p-2">問題</th>
-                <th className="p-2">カテゴリー</th>
-                <th className="p-2">出題日</th>
-                <th className="p-2">復習フェーズ</th>
-                <th className="p-2">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleQuestions.map((q) => (
-                <tr key={q.id} className="border-b border-zinc-200">
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      aria-label={`「${q.question}」を選択`}
-                      checked={selectedIds.has(q.id)}
-                      onChange={() => toggleSelected(q.id)}
-                    />
-                  </td>
-                  <td className="p-2 whitespace-nowrap">{q.createdOn}</td>
-                  <td className="p-2">{q.question}</td>
-                  <td className="p-2 whitespace-nowrap">{q.categoryName}</td>
-                  <td className="p-2 whitespace-nowrap">{q.nextReviewOn ?? "なし"}</td>
-                  <td className="p-2 whitespace-nowrap">フェーズ{q.reviewPhase}</td>
-                  <td className="p-2 whitespace-nowrap">
-                    <Link className="mr-3 text-blue-600 underline" href={`/questions/${q.id}`}>
-                      詳細
-                    </Link>
-                    <Link className="text-blue-600 underline" href={`/questions/${q.id}/edit`}>
-                      修正
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead className="w-10 pl-4">
+                <span className="sr-only">選択</span>
+              </TableHead>
+              <TableHead>作成日</TableHead>
+              <TableHead>問題</TableHead>
+              <TableHead>カテゴリー</TableHead>
+              <TableHead>出題日</TableHead>
+              <TableHead>復習フェーズ</TableHead>
+              <TableHead className="pr-4 text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {visibleQuestions.map((q) => (
+              <TableRow key={q.id} data-state={selectedIds.has(q.id) ? "selected" : undefined}>
+                <TableCell className="pl-4">
+                  <Checkbox
+                    aria-label={`「${q.question}」を選択`}
+                    checked={selectedIds.has(q.id)}
+                    onCheckedChange={() => toggleSelected(q.id)}
+                  />
+                </TableCell>
+                <TableCell className="text-muted-foreground tabular-nums">{q.createdOn}</TableCell>
+                <TableCell className="max-w-xs truncate font-medium" title={q.question}>
+                  {q.question}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{q.categoryName}</Badge>
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  {q.nextReviewOn ?? <span className="text-muted-foreground">なし</span>}
+                </TableCell>
+                <TableCell>
+                  <PhaseBadge phase={q.reviewPhase} />
+                </TableCell>
+                <TableCell className="pr-4 text-right">
+                  <Link
+                    className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+                    href={`/questions/${q.id}`}
+                  >
+                    <Eye />
+                    詳細
+                  </Link>
+                  <Link
+                    className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+                    href={`/questions/${q.id}/edit`}
+                  >
+                    <Pencil />
+                    修正
+                  </Link>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
-    </div>
+
+      <p className="border-t px-4 py-3 text-xs text-muted-foreground">
+        全 {questions.length} 件中 {visibleQuestions.length} 件を表示
+      </p>
+    </Card>
   );
 }
