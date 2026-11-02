@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Anki 風の暗記カードアプリ「超効率！暗記アプリ」（`anki-app`）。仕様は `docs/暗記アプリ要件定義書_20240125.docx`（機能一覧・画面遷移図は docx 内の画像）。
 
-- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**フェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）と、フェーズ2の認証のうち新規登録・ログイン（パスワード再設定メールを含む）・ログアウトまで実装済み**。
-- フェーズ2で残っているもの: 個人設定・アカウント削除、カテゴリーの修正・削除、出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）。
+- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**フェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）と、フェーズ2の認証（新規登録・ログイン（パスワード再設定メールを含む）・ログアウト・個人設定・アカウント削除）まで実装済み**。
+- フェーズ2で残っているもの: カテゴリーの修正・削除、出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）。
 
 ## コマンド
 
@@ -38,7 +38,7 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
   - `shadcn init` は `--font-sans: var(--font-sans)` という自己参照を書き込むことがある。`--font-sans` は `var(--font-geist-sans), var(--font-noto-sans-jp), sans-serif` にすること（日本語は `layout.tsx` で読み込む Noto Sans JP で補う）。
   - アクセント色（`--primary`）はインディゴ。正解表示などに使う成功色として独自トークン `--success` / `--success-foreground`（`bg-success` など）を追加している。
   - `Link` をボタンの見た目にするときは `className={cn(buttonVariants({ ... }))}` と **必ず `cn()` で包む**（cva は結合するだけなので、`border-transparent` と `border-border` のような競合が解決されず outline の枠線が消える）。Base UI の `Button` に `render={<Link />}` を渡すと `role="button"` になりリンクとして扱われないため使わない。
-  - 画面共通の部品: `AppHeader`（layout のヘッダー）、`PageHeader`（見出し・説明・操作ボタン）、`LoadingCard`（Suspense の fallback）、`PhaseBadge`（復習フェーズの表示）。
+  - 画面共通の部品: `AppHeader`（layout のヘッダー。右側の `UserMenu` がログイン中の名前・「プロフィール」・「ログアウト」を出す。スマートフォン幅ではロゴの文字を `sr-only` にして横幅を空けている）、`PageHeader`（見出し・説明・操作ボタン）、`LoadingCard`（Suspense の fallback）、`PhaseBadge`（復習フェーズの表示）。
   - `<select>` は shadcn の `native-select` を使う（テストで `user.selectOptions` を使うため、Base UI の `Select` にはしない）。
   - `globals.css` を変更しても起動中の `next dev` に反映されないことがある。その場合は dev サーバーを再起動する。
 - `LayoutProps<"/">` などのルート型は Next.js が自動生成するグローバル型（`next dev` / `next build` 時に生成）。
@@ -56,10 +56,13 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 
 - メールアドレス + パスワード（Supabase Auth）。**メールアドレスの確認は必須**（Supabase の既定）。名前は `user_metadata.display_name` に保存する。
 - `src/proxy.ts`（旧 middleware）→ `src/lib/supabase/proxy.ts` の `updateSession()` がアクセストークンを更新し、未ログインなら `/login` へ、ログイン済みで `/login`・`/signup`・`/forgot-password` に来たら `/` へリダイレクトする。ログインなしで開ける画面を増やすときは `publicPaths` に追加する。`createServerClient` と `getClaims()` の間に処理を挟まないこと。
-- Server Action は先頭で `@/lib/auth` の `requireUser()` を呼ぶ（未ログインなら `/login` へ。`{ supabase, userId }` を返す）。データは RLS で本人のものに絞られる。
+- Server Action は先頭で `@/lib/auth` の `requireUser()` を呼ぶ（未ログインなら `/login` へ。`{ supabase, userId, claims }` を返す。`claims.email` や `claims.user_metadata.display_name` で現在のメールアドレス・名前が分かる）。データは RLS で本人のものに絞られる。
+- メールのリンクの戻り先は `@/lib/auth` の `confirmUrl(next)` で組み立てる。`"use server"` のファイルで async 関数を export するとクライアントから呼べる Server Action になるため、補助関数は `actions.ts` に置かない。
+- 個人設定（`/settings`、`src/app/settings/actions.ts`）: 名前は `updateUser({ data: { display_name } })`、メールアドレスは確認メール経由で変更（既定の Secure email change では新旧両方に届き、リンクを開くまで変わらない）、パスワードは空なら変更しない。変更前のメールアドレスはクライアントから受け取らずセッションから取る。名前は JWT の `user_metadata` から表示しているため、`updateUser` の後に `refreshSession()` でトークンを発行し直す（しないとヘッダーの名前が再ログインまで古いまま）。
+- アカウント削除は RPC `public.delete_own_account()`（`security definer`、`auth.uid()` 本人の `auth.users` を削除し、FK の cascade で問題・カテゴリーも消える）。secret キーをアプリに持たせないためこの方式にしている。`get_advisors` の `authenticated_security_definer_function_executable` 警告はこの関数のもので想定どおり。削除後は `signOut({ scope: "local" })` で cookie だけ消して `/login` へ。
 - 認証の Server Actions は `src/app/auth/actions.ts`（`login` / `signUp` / `requestPasswordReset` / `resetPassword` / `logout`）。Supabase のエラーは `error.code`（`invalid_credentials`、`email_not_confirmed` など）で文言を出し分ける。
 - 確認メール・再設定メールのリンクは `src/app/auth/confirm/route.ts` で受ける。`token_hash` + `type`（`verifyOtp`）と `code`（`exchangeCodeForSession`。既定のメールテンプレートの場合で、同じブラウザでのみ有効）の両方に対応。戻り先 `next` は `safeNextPath()`（`src/lib/safeNextPath.ts`）でアプリ内のパスに限定する。失敗時は `/auth/error`。
-- Supabase ダッシュボード側の設定（コード管理外）: Site URL `http://localhost:3000`、Redirect URLs に `http://localhost:3000/auth/confirm`。本番にデプロイするときはそのドメインも追加する。
+- Supabase ダッシュボード側の設定（コード管理外）: Site URL は Vercel の公開 URL、Redirect URLs は `http://localhost:3000/**` と `https://<公開 URL>/**`。`?next=...` が付いても許可されるよう `/**` で登録する。許可されない戻り先を渡すと Site URL にフォールバックするため、Site URL を Supabase の URL にすると確認リンクが `{"error":"requested path is invalid"}` になる。
 - パスワードの条件（英小文字・英大文字・数字・記号をすべて含む 8 文字以上）は `validatePassword()` とダッシュボードのパスワードポリシーの両方で設定している。ログイン時は形式を確認しない。
 
 ### データベース
@@ -85,6 +88,7 @@ src/app/                 ページ（App Router）と Server Actions（各ディ
   categories/            カテゴリー一覧・登録
   review/                復習（今日の問題）
   login|signup|forgot-password|reset-password   認証の画面（幅は max-w-md）
+  settings/              個人設定（名前・メールアドレス・パスワードの変更、アカウント削除）
   auth/                  認証の Server Actions（actions.ts）、メールリンクの受け口（confirm/route.ts）、失敗時の案内（error/）
 src/proxy.ts             セッション更新と未ログイン時のリダイレクト（中身は src/lib/supabase/proxy.ts）
 src/lib/auth.ts          requireUser()（Server Action 用の利用者確認）

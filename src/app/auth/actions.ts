@@ -1,7 +1,7 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { confirmUrl } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { AuthFormState } from "@/lib/types";
 import {
@@ -10,13 +10,6 @@ import {
   validateNewPassword,
   validateSignUp,
 } from "@/lib/validation";
-
-// メール内のリンクの戻り先。リンクは /auth/confirm で受けてから next の画面へ進める
-async function confirmUrl(next: string): Promise<string | undefined> {
-  const origin = (await headers()).get("origin");
-  // origin が取れない場合は Supabase に設定した Site URL が使われる
-  return origin ? `${origin}/auth/confirm?next=${encodeURIComponent(next)}` : undefined;
-}
 
 export async function login(
   _prevState: AuthFormState,
