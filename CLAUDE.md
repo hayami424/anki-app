@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Anki 風の暗記カードアプリ「超効率！暗記アプリ」（`anki-app`）。仕様は `docs/暗記アプリ要件定義書_20240125.docx`（機能一覧・画面遷移図は docx 内の画像）。
 
-- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**現在はフェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）まで実装済み**。
-- フェーズ2で残っているもの: 認証（新規登録・ログイン・ログアウト・個人設定・アカウント削除）、カテゴリーの修正・削除、出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）。
+- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**フェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）と、フェーズ2の認証のうち新規登録・ログイン（パスワード再設定メールを含む）・ログアウトまで実装済み**。
+- フェーズ2で残っているもの: 個人設定・アカウント削除、カテゴリーの修正・削除、出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）。
 
 ## コマンド
 
@@ -49,21 +49,32 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 - プロジェクト: `anki-app`（ref: `nqdqtpwmhwyevcrshywf`、URL: `https://nqdqtpwmhwyevcrshywf.supabase.co`）。同じ組織に別アプリ用の `task-kanban` プロジェクトもあるため、Supabase MCP を使うときは project_id を取り違えないこと。
 - 環境変数は `NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`（キーの一覧は `.env.example`、実際の値は `.env.local`）。キーは旧来の anon キーではなく publishable キー（`sb_publishable_...`）を使う。
 - パッケージは `@supabase/supabase-js` と `@supabase/ssr`。クライアントは用途で使い分ける:
-  - `@/lib/supabase/server` の `createClient()` — Server Component / Server Action / Route Handler 用。`cookies()` を使うため **async**（`await createClient()`）。Server Component から呼ばれた場合、cookie の書き込みは握りつぶしている。
+  - `@/lib/supabase/server` の `createClient()` — Server Component / Server Action / Route Handler 用。`cookies()` を使うため **async**（`await createClient()`）。Server Component から呼ばれた場合、cookie の書き込みは握りつぶしている。中で `await connection()` を呼んでいる（Supabase がトークンの期限確認に `Date.now()` を使い、Partial Prefetching の App Shell（`cookies()` を読む部分も事前描画される）で「Blocking Route」エラーになるため）。
   - `@/lib/supabase/client` の `createClient()` — Client Component（`"use client"`）用。
 - 起動時の接続チェック: `src/instrumentation.ts` の `register()` が Node.js ランタイムでのみ `checkSupabaseConnection()`（`src/lib/supabase/checkConnection.ts`）を実行する。`/auth/v1/health` に publishable キーを付けて問い合わせるので、テーブルがなくても確認できる。**失敗時のみ** `console.error` でログを出し、成功時は何も出さない方針。
-- セッション更新用の `proxy.ts`（旧 middleware）はまだ用意していない。認証機能を追加するときに Supabase 公式の Next.js ガイドに沿って追加すること。
+### 認証
+
+- メールアドレス + パスワード（Supabase Auth）。**メールアドレスの確認は必須**（Supabase の既定）。名前は `user_metadata.display_name` に保存する。
+- `src/proxy.ts`（旧 middleware）→ `src/lib/supabase/proxy.ts` の `updateSession()` がアクセストークンを更新し、未ログインなら `/login` へ、ログイン済みで `/login`・`/signup`・`/forgot-password` に来たら `/` へリダイレクトする。ログインなしで開ける画面を増やすときは `publicPaths` に追加する。`createServerClient` と `getClaims()` の間に処理を挟まないこと。
+- Server Action は先頭で `@/lib/auth` の `requireUser()` を呼ぶ（未ログインなら `/login` へ。`{ supabase, userId }` を返す）。データは RLS で本人のものに絞られる。
+- 認証の Server Actions は `src/app/auth/actions.ts`（`login` / `signUp` / `requestPasswordReset` / `resetPassword` / `logout`）。Supabase のエラーは `error.code`（`invalid_credentials`、`email_not_confirmed` など）で文言を出し分ける。
+- 確認メール・再設定メールのリンクは `src/app/auth/confirm/route.ts` で受ける。`token_hash` + `type`（`verifyOtp`）と `code`（`exchangeCodeForSession`。既定のメールテンプレートの場合で、同じブラウザでのみ有効）の両方に対応。戻り先 `next` は `safeNextPath()`（`src/lib/safeNextPath.ts`）でアプリ内のパスに限定する。失敗時は `/auth/error`。
+- Supabase ダッシュボード側の設定（コード管理外）: Site URL `http://localhost:3000`、Redirect URLs に `http://localhost:3000/auth/confirm`。本番にデプロイするときはそのドメインも追加する。
+- パスワードの条件（英小文字・英大文字・数字・記号をすべて含む 8 文字以上）は `validatePassword()` とダッシュボードのパスワードポリシーの両方で設定している。ログイン時は形式を確認しない。
 
 ### データベース
 
 - スキーマ変更は Supabase MCP の `apply_migration` で行い、同じ SQL を `supabase/migrations/<version>_<name>.sql` に保存する（version は `list_migrations` で確認）。変更後は `get_advisors`（security）を確認し、`generate_typescript_types` で `src/lib/supabase/database.types.ts` を再生成する。
 - テーブル:
-  - `categories` — `name` は一意・1〜50 文字。
-  - `questions` — `category_id`（`categories` への FK、`on delete restrict`）、`question` / `answer`（1〜1000 文字）、`url`（null か `http(s)://`）、`review_phase`（1〜4）、`next_review_on`（date）、`created_at`、`updated_at`（トリガーで自動更新）。
+  - 両テーブルとも `user_id`（`auth.users` への FK、`on delete cascade`、既定値 `auth.uid()`、NOT NULL）を持つ。insert 時は `user_id` を渡さず既定値に任せる。
+  - `categories` — `name` は利用者ごとに一意（`(user_id, name)`）・1〜50 文字。
+  - `questions` — `category_id`（`categories` への FK）、`question` / `answer`（1〜1000 文字）、`url`（null か `http(s)://`）、`review_phase`（1〜4）、`next_review_on`（date）、`created_at`、`updated_at`（トリガーで自動更新）。
+  - `questions` → `categories` の FK は 2 つある: `questions_category_id_fkey`（`category_id` 単独）と `questions_category_id_user_id_fkey`（`(category_id, user_id)` 複合。他人のカテゴリーを参照させないため）。どちらも `no action`（問題が残るカテゴリーは削除できない。アカウント削除時は同じ文の中で両方消えるので通る）。**PostgREST で埋め込むときは `categories!questions_category_id_fkey(name)` と FK を指定する**（指定しないと曖昧でエラーになる）。
   - 制約 `questions_next_review_on_consistency`: **`review_phase = 4` のときだけ `next_review_on` が null**。更新時は両方をセットで変えること。
 - 入力値の制約はアプリ側（`src/lib/validation.ts`）と DB の check 制約の両方にある。上限を変えるときは両方を直す。
-- **RLS は anon ロールに全許可（`using (true)`）している**。フェーズ1は認証なしのため。フェーズ2で認証を入れるときは `user_id` 列を追加し、`auth.uid()` で絞るポリシーに置き換えること（Server Action 側でも利用者確認を追加する）。カテゴリーの削除を実装するときは FK の `on delete restrict` の扱いも決める。
-- エラーコードの扱い: `23505`（一意制約違反）→ カテゴリー名の重複メッセージ、`22P02`（不正な UUID）→ 存在しない問題として `notFound()`。
+- **RLS は `authenticated` ロールのみ、`(select auth.uid()) = user_id` の行だけ select / insert / update / delete できる**。anon には何も許可していない。
+- フェーズ1で作ったデータは、マイグレーション `assign_existing_rows_and_require_user_id` で最初に登録した利用者（作者本人）に割り当て済み。
+- エラーコードの扱い: `23505`（一意制約違反）→ カテゴリー名の重複メッセージ、`22P02`（不正な UUID）→ 存在しない問題として `notFound()`。`23503`（FK 違反）は問題が残るカテゴリーの削除時に起きる。
 
 ## アーキテクチャ
 
@@ -73,6 +84,10 @@ src/app/                 ページ（App Router）と Server Actions（各ディ
   questions/new|[id]|[id]/edit   問題作成・詳細・修正（修正画面は ?from=detail で戻り先を切り替え）
   categories/            カテゴリー一覧・登録
   review/                復習（今日の問題）
+  login|signup|forgot-password|reset-password   認証の画面（幅は max-w-md）
+  auth/                  認証の Server Actions（actions.ts）、メールリンクの受け口（confirm/route.ts）、失敗時の案内（error/）
+src/proxy.ts             セッション更新と未ログイン時のリダイレクト（中身は src/lib/supabase/proxy.ts）
+src/lib/auth.ts          requireUser()（Server Action 用の利用者確認）
 src/components/          画面の UI（Client Component 中心）。データとアクションは props で受け取る
 src/components/ui/       shadcn/ui の部品（CLI で生成）
 src/lib/utils.ts         cn()（shadcn/ui 用のクラス名結合）
@@ -140,7 +155,7 @@ shadcn/ui の導入方法や技術的な注意点は「技術スタックと注�
   | 進み具合 | `Progress` |
 
 ### ページ構成
-- ページ（`page.tsx`）は `<main className="mx-auto flex w-full max-w-… flex-col gap-6 px-4 py-8 sm:py-10">` で包む。幅は一覧 `max-w-5xl`、詳細 `max-w-3xl`、フォーム・復習など 1 列の画面は `max-w-2xl`。
+- ページ（`page.tsx`）は `<main className="mx-auto flex w-full max-w-… flex-col gap-6 px-4 py-8 sm:py-10">` で包む。幅は一覧 `max-w-5xl`、詳細 `max-w-3xl`、フォーム・復習など 1 列の画面は `max-w-2xl`、認証の画面（ログイン・新規登録など）は `max-w-md`。
 - 見出しは必ず `PageHeader`（`title` は `<h1>`、`description` に 1 文の説明、右側の操作ボタンは `actions`）。ページ内で `<h1>` を直接書かない。
 - ヘッダー（`AppHeader`）は `layout.tsx` で全画面共通に表示する。画面間のナビゲーションボタンはヘッダーではなく各ページの `PageHeader` の `actions` やカード下部に置く（テストがページ単位でリンクを検証しているため）。
 - `<Suspense>` の fallback は `LoadingCard` に統一する。

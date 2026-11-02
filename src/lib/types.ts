@@ -1,3 +1,5 @@
+import type { AuthFieldErrors, AuthFormValues } from "@/lib/validation";
+
 // 1〜3 は復習待ち、4 は復習完了
 export type ReviewPhase = 1 | 2 | 3 | 4;
 
@@ -26,4 +28,12 @@ export type ReviewQuestion = {
   id: string;
   question: string;
   categoryName: string;
+};
+
+// 認証まわりのフォーム（ログイン・新規登録・パスワード再設定）の送信結果
+export type AuthFormState = {
+  errors?: AuthFieldErrors & { form?: string };
+  values?: AuthFormValues;
+  // 確認メール・再設定メールを送信できたとき true
+  sent?: boolean;
 };

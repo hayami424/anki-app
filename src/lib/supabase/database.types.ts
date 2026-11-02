@@ -20,16 +20,19 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          user_id?: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -44,6 +47,7 @@ export type Database = {
           review_phase: number
           updated_at: string
           url: string | null
+          user_id: string
         }
         Insert: {
           answer: string
@@ -55,6 +59,7 @@ export type Database = {
           review_phase?: number
           updated_at?: string
           url?: string | null
+          user_id?: string
         }
         Update: {
           answer?: string
@@ -66,6 +71,7 @@ export type Database = {
           review_phase?: number
           updated_at?: string
           url?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -74,6 +80,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "categories"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questions_category_id_user_id_fkey"
+            columns: ["category_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id", "user_id"]
           },
         ]
       }

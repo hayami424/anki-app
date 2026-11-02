@@ -3,10 +3,8 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import type { QuestionFormState } from "@/components/QuestionForm";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
 import { validateQuestionInput, type QuestionInput } from "@/lib/validation";
-
-// フェーズ1は認証なし。フェーズ2で認証を導入する際は、各アクションの先頭で利用者を確認すること
 
 function saveFailed(input: QuestionInput): QuestionFormState {
   return {
@@ -22,7 +20,7 @@ export async function createQuestion(
   const result = validateQuestionInput(formData);
   if (!result.ok) return { errors: result.errors, values: result.values };
 
-  const supabase = await createClient();
+  const { supabase } = await requireUser();
   const { error } = await supabase.from("questions").insert({
     category_id: result.value.categoryId,
     question: result.value.question,
@@ -42,7 +40,7 @@ export async function updateQuestion(
   const result = validateQuestionInput(formData);
   if (!result.ok) return { errors: result.errors, values: result.values };
 
-  const supabase = await createClient();
+  const { supabase } = await requireUser();
   const { error } = await supabase
     .from("questions")
     .update({
@@ -57,7 +55,7 @@ export async function updateQuestion(
 }
 
 export async function deleteQuestion(id: string): Promise<{ error?: string }> {
-  const supabase = await createClient();
+  const { supabase } = await requireUser();
   const { error } = await supabase.from("questions").delete().eq("id", id);
   if (error) return { error: "問題の削除に失敗しました" };
   redirect("/");
@@ -65,7 +63,7 @@ export async function deleteQuestion(id: string): Promise<{ error?: string }> {
 
 export async function deleteQuestions(ids: string[]): Promise<{ error?: string }> {
   if (ids.length === 0) return {};
-  const supabase = await createClient();
+  const { supabase } = await requireUser();
   const { error } = await supabase.from("questions").delete().in("id", ids);
   if (error) return { error: "問題の削除に失敗しました" };
   refresh();

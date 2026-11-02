@@ -2,8 +2,9 @@ import { toTokyoDate } from "@/lib/review/schedule";
 import { createClient } from "@/lib/supabase/server";
 import type { Category, Question, ReviewPhase } from "@/lib/types";
 
+// questions から categories への FK が 2 つ（category_id 単独と user_id との複合）あるため、使う FK を指定する
 const questionColumns =
-  "id, category_id, question, answer, url, review_phase, next_review_on, created_at, categories(name)";
+  "id, category_id, question, answer, url, review_phase, next_review_on, created_at, categories!questions_category_id_fkey(name)";
 
 // PostgreSQL の型変換エラー（不正な UUID 文字列など）
 const invalidTextRepresentation = "22P02";
