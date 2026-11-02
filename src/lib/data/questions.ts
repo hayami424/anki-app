@@ -1,6 +1,6 @@
 import { toTokyoDate } from "@/lib/review/schedule";
 import { createClient } from "@/lib/supabase/server";
-import type { Category, Question, ReviewPhase } from "@/lib/types";
+import type { Category, CategorySummary, Question, ReviewPhase } from "@/lib/types";
 
 // questions から categories への FK が 2 つ（category_id 単独と user_id との複合）あるため、使う FK を指定する
 const questionColumns =
@@ -77,4 +77,18 @@ export async function getCategories(): Promise<Category[]> {
     .order("created_at", { ascending: true });
   if (error) throw new Error(`カテゴリーの取得に失敗しました: ${error.message}`);
   return data;
+}
+
+export async function getCategorySummaries(): Promise<CategorySummary[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("categories")
+    .select("id, name, questions!questions_category_id_fkey(count)")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`カテゴリーの取得に失敗しました: ${error.message}`);
+  return data.map(({ id, name, questions }) => ({
+    id,
+    name,
+    questionCount: questions[0]?.count ?? 0,
+  }));
 }

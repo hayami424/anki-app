@@ -8,6 +8,11 @@ export type Category = {
   name: string;
 };
 
+// カテゴリー一覧で使う。問題が 1 件でもあるカテゴリーは削除できない
+export type CategorySummary = Category & {
+  questionCount: number;
+};
+
 export type Question = {
   id: string;
   categoryId: string;
