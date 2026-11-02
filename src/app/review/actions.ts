@@ -2,11 +2,15 @@
 
 import type { SubmitAnswerResult } from "@/components/ReviewSession";
 import { isCorrectAnswer } from "@/lib/review/judge";
-import { isDue, nextSchedule, toTokyoDate } from "@/lib/review/schedule";
+import { shouldUpdateSchedule } from "@/lib/review/mode";
+import { nextSchedule, toTokyoDate } from "@/lib/review/schedule";
 import { requireUser } from "@/lib/auth";
 import type { ReviewPhase } from "@/lib/types";
 
+// mode はページで .bind して渡す出題タイプ。クライアントから書き換えられても、
+// 出題日を迎えていない問題のスケジュールは shouldUpdateSchedule が進めない
 export async function submitAnswer(
+  mode: string,
   id: string,
   userAnswer: string,
 ): Promise<SubmitAnswerResult> {
@@ -21,8 +25,8 @@ export async function submitAnswer(
   const isCorrect = isCorrectAnswer(userAnswer, question.answer);
   const today = toTokyoDate(new Date());
 
-  // 二重送信などで出題日を迎えていない問題のスケジュールを進めないようにする
-  if (isDue({ nextReviewOn: question.next_review_on }, today)) {
+  // 全問復習・カテゴリー別は練習なので進めない。二重送信などで出題日を迎えていない問題も進めない
+  if (shouldUpdateSchedule(mode, { nextReviewOn: question.next_review_on }, today)) {
     const schedule = nextSchedule(
       {
         reviewPhase: question.review_phase as ReviewPhase,

@@ -6,6 +6,7 @@ import {
   CircleAlert,
   CircleCheck,
   CircleX,
+  Inbox,
   PartyPopper,
   Play,
   Send,
@@ -21,8 +22,10 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { ReviewModeForm } from "@/components/ReviewModeForm";
+import type { ReviewSelection } from "@/lib/review/mode";
 import { cn } from "@/lib/utils";
-import type { ReviewQuestion } from "@/lib/types";
+import type { Category, ReviewQuestion } from "@/lib/types";
 
 export type SubmitAnswerResult =
   | { isCorrect: boolean; correctAnswer: string }
@@ -31,11 +34,45 @@ export type SubmitAnswerResult =
 type Props = {
   questions: ReviewQuestion[];
   submitAnswerAction: (id: string, answer: string) => Promise<SubmitAnswerResult>;
+  // 出題タイプ。省略時は「今日の問題」
+  selection?: ReviewSelection;
+  // 「カテゴリー別」で選べるカテゴリー
+  categories?: Category[];
 };
 
 type Judgement = { userAnswer: string; isCorrect: boolean; correctAnswer: string };
 
-export function ReviewSession({ questions, submitAnswerAction }: Props) {
+function emptyMessage(selection: ReviewSelection): { title: string; description: string } {
+  switch (selection.mode) {
+    case "today":
+      return {
+        title: "今日復習する問題はありません",
+        description: "また明日、出題日を迎えた問題に挑戦しましょう",
+      };
+    case "all":
+      return {
+        title: "問題がまだ登録されていません",
+        description: "問題を作成してから復習しましょう",
+      };
+    case "category":
+      return selection.categoryId === null
+        ? {
+            title: "カテゴリーを選んでください",
+            description: "選んだカテゴリーの問題をランダムに出題します",
+          }
+        : {
+            title: "このカテゴリーには問題がありません",
+            description: "別のカテゴリーを選ぶか、問題を作成しましょう",
+          };
+  }
+}
+
+export function ReviewSession({
+  questions,
+  submitAnswerAction,
+  selection = { mode: "today" },
+  categories = [],
+}: Props) {
   const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
@@ -45,51 +82,79 @@ export function ReviewSession({ questions, submitAnswerAction }: Props) {
   const [error, setError] = useState<string>();
   const [isPending, startTransition] = useTransition();
 
+  const modeForm = (
+    <Card>
+      <CardContent>
+        <ReviewModeForm selection={selection} categories={categories} />
+      </CardContent>
+    </Card>
+  );
+
   if (questions.length === 0) {
+    const empty = emptyMessage(selection);
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-          <span className="flex size-14 items-center justify-center rounded-full bg-success/15 text-success">
-            <Sparkles className="size-7" />
-          </span>
-          <div className="flex flex-col gap-1">
-            <p className="text-lg font-semibold">今日復習する問題はありません</p>
-            <p className="text-sm text-muted-foreground">
-              また明日、出題日を迎えた問題に挑戦しましょう
-            </p>
-          </div>
-          <Link className={cn(buttonVariants({ variant: "outline" }))} href="/">
-            <ArrowLeft />
-            戻る
-          </Link>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-6">
+        {modeForm}
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            {selection.mode === "today" ? (
+              <span className="flex size-14 items-center justify-center rounded-full bg-success/15 text-success">
+                <Sparkles className="size-7" />
+              </span>
+            ) : (
+              <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Inbox className="size-7" />
+              </span>
+            )}
+            <div className="flex flex-col gap-1">
+              <p className="text-lg font-semibold">{empty.title}</p>
+              <p className="text-sm text-muted-foreground">{empty.description}</p>
+            </div>
+            <Link className={cn(buttonVariants({ variant: "outline" }))} href="/">
+              <ArrowLeft />
+              戻る
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   if (!started) {
+    const isToday = selection.mode === "today";
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-          <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Play className="size-7" />
-          </span>
-          <div className="flex flex-col gap-1">
-            <p className="text-lg font-semibold">今日の問題は {questions.length} 問です</p>
-            <p className="text-sm text-muted-foreground">準備ができたらスタートしましょう</p>
-          </div>
-          <div className="flex gap-2">
-            <Link className={cn(buttonVariants({ variant: "outline", size: "lg" }))} href="/">
-              <ArrowLeft />
-              戻る
-            </Link>
-            <Button type="button" size="lg" onClick={() => setStarted(true)}>
-              <Play />
-              復習スタート
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-6">
+        {modeForm}
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+            <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Play className="size-7" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <p className="text-lg font-semibold">
+                {isToday
+                  ? `今日の問題は ${questions.length} 問です`
+                  : `出題する問題は ${questions.length} 問です`}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {isToday
+                  ? "準備ができたらスタートしましょう"
+                  : "練習なので、解答しても復習フェーズと出題日は変わりません"}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link className={cn(buttonVariants({ variant: "outline", size: "lg" }))} href="/">
+                <ArrowLeft />
+                戻る
+              </Link>
+              <Button type="button" size="lg" onClick={() => setStarted(true)}>
+                <Play />
+                復習スタート
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
