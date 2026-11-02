@@ -5,6 +5,7 @@ import {
   validateLogin,
   validateNewPassword,
   validatePassword,
+  validateProfile,
   validateQuestionInput,
   validateSignUp,
 } from "./validation";
@@ -283,5 +284,43 @@ describe("validateNewPassword", () => {
   test("条件を満たさなければエラーになる", () => {
     const result = validateNewPassword(authForm({ password: "password" }));
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("validateProfile", () => {
+  const base = { name: "山田太郎", email: "taro@example.com" };
+
+  test("パスワードが空なら変更しない（null）として返す", () => {
+    expect(validateProfile(authForm({ ...base, password: "" }))).toEqual({
+      ok: true,
+      value: { name: "山田太郎", email: "taro@example.com", password: null },
+    });
+  });
+
+  test("パスワードを入力した場合は条件を満たせばそのまま返す", () => {
+    const result = validateProfile(authForm({ ...base, password: validPassword }));
+
+    expect(result).toEqual({
+      ok: true,
+      value: { name: "山田太郎", email: "taro@example.com", password: validPassword },
+    });
+  });
+
+  test("入力したパスワードが条件を満たさなければエラーになる", () => {
+    const result = validateProfile(authForm({ ...base, password: "short" }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.password).toMatch(/8文字以上/);
+  });
+
+  test("名前が空、メールアドレスの形式が不正ならエラーになり、入力値を返す", () => {
+    const result = validateProfile(authForm({ name: " ", email: "taro", password: "" }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.name).toBe("名前を入力してください");
+    expect(result.errors.email).toBe("メールアドレスの形式が正しくありません");
+    expect(result.values).toEqual({ name: " ", email: "taro" });
   });
 });

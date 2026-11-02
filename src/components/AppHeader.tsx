@@ -11,7 +11,8 @@ export function AppHeader() {
           <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <BrainCircuit className="size-5" />
           </span>
-          超効率！暗記アプリ
+          {/* スマートフォン幅ではプロフィール・ログアウトと並ぶと収まらないため、文字は読み上げ用にだけ残す */}
+          <span className="sr-only sm:not-sr-only">超効率！暗記アプリ</span>
         </Link>
         {/* ログイン状態は cookie から読むリクエストごとの情報なので Suspense で包む */}
         <Suspense fallback={null}>

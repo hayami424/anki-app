@@ -179,3 +179,24 @@ export function validateNewPassword(
   if (error) return { ok: false, errors: { password: error }, values: { name: "", email: "" } };
   return { ok: true, value: { password } };
 }
+
+// 個人設定。パスワードは空なら変更しない（null）
+export function validateProfile(
+  formData: FormData,
+): AuthValidationResult<{ name: string; email: string; password: string | null }> {
+  const values: AuthFormValues = {
+    name: getString(formData, "name"),
+    email: getString(formData, "email"),
+  };
+  const name = values.name.trim();
+  const email = values.email.trim();
+  const password = getString(formData, "password");
+
+  const errors: AuthFieldErrors = {
+    name: validateRequiredText(name, "名前", displayNameMaxLength),
+    email: validateEmail(email),
+    password: password === "" ? undefined : validatePassword(password),
+  };
+  if (hasErrors(errors)) return { ok: false, errors, values };
+  return { ok: true, value: { name, email, password: password === "" ? null : password } };
+}
