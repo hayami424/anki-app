@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import type { CategoryFormState } from "@/components/CategoryManager";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
 import { validateCategoryName } from "@/lib/validation";
 
 // PostgreSQL の一意制約違反
@@ -16,7 +16,7 @@ export async function createCategory(
   const name = String(formData.get("name") ?? "");
   if (!result.ok) return { error: result.error, name };
 
-  const supabase = await createClient();
+  const { supabase } = await requireUser();
   const { error } = await supabase.from("categories").insert({ name: result.value });
   if (error) {
     return {

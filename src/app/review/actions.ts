@@ -3,14 +3,14 @@
 import type { SubmitAnswerResult } from "@/components/ReviewSession";
 import { isCorrectAnswer } from "@/lib/review/judge";
 import { isDue, nextSchedule, toTokyoDate } from "@/lib/review/schedule";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/auth";
 import type { ReviewPhase } from "@/lib/types";
 
 export async function submitAnswer(
   id: string,
   userAnswer: string,
 ): Promise<SubmitAnswerResult> {
-  const supabase = await createClient();
+  const { supabase } = await requireUser();
   const { data: question, error } = await supabase
     .from("questions")
     .select("answer, review_phase, next_review_on, created_at")

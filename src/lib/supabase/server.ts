@@ -1,8 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import type { Database } from "./database.types";
 
 export async function createClient() {
+  // Supabase はトークンの有効期限を Date.now() と比べるため、事前描画（cookies() を読む部分も含む）
+  // ではなくリクエスト時に実行する。データは利用者ごとでキャッシュしていないので描画結果は変わらない
+  await connection();
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
