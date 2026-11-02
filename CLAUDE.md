@@ -8,8 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Anki 風の暗記カードアプリ「超効率！暗記アプリ」（`anki-app`）。仕様は `docs/暗記アプリ要件定義書_20240125.docx`（機能一覧・画面遷移図は docx 内の画像）。
 
-- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**フェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）と、フェーズ2の認証（新規登録・ログイン（パスワード再設定メールを含む）・ログアウト・個人設定・アカウント削除）、カテゴリーの修正・削除まで実装済み**。
-- フェーズ2で残っているもの: 出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）。
+- 要件定義書の機能一覧は「作成フェーズ」1 / 2 に分かれている。**フェーズ1（問題の登録・修正・削除、カテゴリー登録、一覧・詳細表示、今日の問題の出題・正誤判定）と、フェーズ2の認証（新規登録・ログイン（パスワード再設定メールを含む）・ログアウト・個人設定・アカウント削除）、カテゴリーの修正・削除、出題タイプ選択（今日の問題 / 全問復習 / カテゴリー別）まで実装済みで、要件定義書の機能はすべて揃っている**。
 
 ## コマンド
 
@@ -86,7 +85,7 @@ src/app/                 ページ（App Router）と Server Actions（各ディ
   page.tsx               問題一覧 /
   questions/new|[id]|[id]/edit   問題作成・詳細・修正（修正画面は ?from=detail で戻り先を切り替え）
   categories/            カテゴリー一覧・登録・修正（行内で編集）・削除（チェックしてまとめて削除）
-  review/                復習（今日の問題）
+  review/                復習（?mode=today|all|category&categoryId=... で出題タイプを切り替え）
   login|signup|forgot-password|reset-password   認証の画面（幅は max-w-md）
   settings/              個人設定（名前・メールアドレス・パスワードの変更、アカウント削除）
   auth/                  認証の Server Actions（actions.ts）、メールリンクの受け口（confirm/route.ts）、失敗時の案内（error/）
@@ -96,7 +95,7 @@ src/components/          画面の UI（Client Component 中心）。データ�
 src/components/ui/       shadcn/ui の部品（CLI で生成）
 src/lib/utils.ts         cn()（shadcn/ui 用のクラス名結合）
 src/lib/data/questions.ts   Supabase からの取得（DB の行 → アプリの型への変換もここ）
-src/lib/review/          出題日計算（schedule）・正誤判定（judge）・シャッフル（shuffle）。純粋関数
+src/lib/review/          出題日計算（schedule）・正誤判定（judge）・シャッフル（shuffle）・出題タイプ（mode）。純粋関数
 src/lib/validation.ts    フォーム入力の検証（FormData を受け取る純粋関数）
 src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQuestion など）
 ```
@@ -116,6 +115,13 @@ src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQu
 - 「今日の問題」は `next_review_on <= 今日` の問題。解答時のスケジュール更新は、出題日を迎えている問題に限る（二重送信対策）。
 - 正誤判定（`judge.ts`）は NFKC 正規化・前後の空白除去・連続する空白をまとめたうえで完全一致。英字の大文字・小文字は区別する。
 - 解答の判定はサーバー（`src/app/review/actions.ts` の `submitAnswer`）で行い、復習画面のクライアントには正解を渡さない（`ReviewQuestion` 型）。
+
+### 出題タイプ（`src/lib/review/mode.ts`）
+
+- 「今日の問題」（`today`）・「全問復習」（`all`、全問題をランダム）・「カテゴリー別」（`category`、選んだカテゴリーの問題をランダム）。URL の検索パラメーター `mode` / `categoryId` で切り替え、`parseReviewSelection()` で読み取る（不明な値は `today`）。
+- 復習画面の開始前と 0 件のときに `ReviewModeForm`（`next/form` の GET フォーム）を表示する。`ReviewSession` は `selection` を省略すると「今日の問題」として動く。ページは出題タイプごとに `key` を変えて、進み具合を最初からにしている。
+- **復習フェーズ・出題日を更新するのは「今日の問題」だけ**。全問復習・カテゴリー別は練習として正誤判定のみ。判定は `shouldUpdateSchedule(mode, question, today)`（`mode === "today"` かつ出題日を迎えている問題）。
+- `submitAnswer(mode, id, answer)` の `mode` はページで `.bind` して渡すため、クライアントから書き換えられる。それでも出題日を迎えていない問題は進まないので、「今日の問題」で正当に解答した場合と結果は変わらない。
 
 ## テスト
 

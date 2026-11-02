@@ -178,3 +178,83 @@ describe("ReviewSession 問題の遷移", () => {
     );
   });
 });
+
+describe("ReviewSession 出題タイプの選択", () => {
+  const categories = [
+    { id: "history", name: "日本史" },
+    { id: "english", name: "英語" },
+  ];
+
+  test("省略時は「今日の問題」を選択した状態で、カテゴリーの選択欄は表示しない", () => {
+    renderSession();
+
+    expect(screen.getByLabelText("出題タイプ")).toHaveValue("today");
+    expect(screen.queryByLabelText("カテゴリー")).not.toBeInTheDocument();
+  });
+
+  test("「カテゴリー別」を選ぶとカテゴリーの選択欄を表示する", async () => {
+    const user = userEvent.setup();
+    renderSession({ categories });
+
+    await user.selectOptions(screen.getByLabelText("出題タイプ"), "category");
+
+    const categorySelect = screen.getByLabelText("カテゴリー");
+    expect(categorySelect).toHaveValue("");
+    await user.selectOptions(categorySelect, "english");
+    expect(categorySelect).toHaveValue("english");
+  });
+
+  test("選択欄は /review への GET フォームで送信する", () => {
+    renderSession();
+
+    const form = screen.getByRole("button", { name: "この条件で出題" }).closest("form");
+    expect(form).toHaveAttribute("action", "/review");
+  });
+
+  test("「全問復習」では出題数と、出題日が変わらないことを表示する", () => {
+    renderSession({ selection: { mode: "all" } });
+
+    expect(screen.getByLabelText("出題タイプ")).toHaveValue("all");
+    expect(screen.getByText("出題する問題は 2 問です")).toBeInTheDocument();
+    expect(
+      screen.getByText("練習なので、解答しても復習フェーズと出題日は変わりません"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("今日の問題は 2 問です")).not.toBeInTheDocument();
+  });
+
+  test("「カテゴリー別」では選んだカテゴリーを選択欄に表示する", () => {
+    renderSession({ selection: { mode: "category", categoryId: "history" }, categories });
+
+    expect(screen.getByLabelText("出題タイプ")).toHaveValue("category");
+    expect(screen.getByLabelText("カテゴリー")).toHaveValue("history");
+    expect(screen.getByText("出題する問題は 2 問です")).toBeInTheDocument();
+  });
+
+  test("問題が 0 件でも出題タイプを選び直せる", () => {
+    renderSession({ questions: [] });
+
+    expect(screen.getByLabelText("出題タイプ")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "この条件で出題" })).toBeInTheDocument();
+  });
+
+  test.each([
+    [{ mode: "all" } as const, "問題がまだ登録されていません"],
+    [{ mode: "category", categoryId: null } as const, "カテゴリーを選んでください"],
+    [{ mode: "category", categoryId: "history" } as const, "このカテゴリーには問題がありません"],
+  ])("問題が 0 件のとき、出題タイプ %o に合わせたメッセージを表示する", (selection, message) => {
+    renderSession({ questions: [], selection, categories });
+
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "復習スタート" })).not.toBeInTheDocument();
+  });
+
+  test("出題タイプを選んだ後も、解答は同じアクションで送信する", async () => {
+    const user = userEvent.setup();
+    const { submitAnswerAction } = renderSession({ selection: { mode: "all" } });
+
+    await startReview(user);
+    await answer(user, "徳川家康");
+
+    expect(submitAnswerAction).toHaveBeenCalledTimes(1);
+  });
+});

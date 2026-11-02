@@ -69,6 +69,18 @@ export async function getDueQuestions(today: string): Promise<Question[]> {
   return data.map(toQuestion);
 }
 
+export async function getQuestionsByCategory(categoryId: string): Promise<Question[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("questions")
+    .select(questionColumns)
+    .eq("category_id", categoryId);
+  // UUID として不正な ID（URL の打ち間違いなど）は「問題がないカテゴリー」として扱う
+  if (error?.code === invalidTextRepresentation) return [];
+  if (error) throw new Error(`問題の取得に失敗しました: ${error.message}`);
+  return data.map(toQuestion);
+}
+
 export async function getCategories(): Promise<Category[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
