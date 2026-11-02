@@ -62,7 +62,7 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 - アカウント削除は RPC `public.delete_own_account()`（`security definer`、`auth.uid()` 本人の `auth.users` を削除し、FK の cascade で問題・カテゴリーも消える）。secret キーをアプリに持たせないためこの方式にしている。`get_advisors` の `authenticated_security_definer_function_executable` 警告はこの関数のもので想定どおり。削除後は `signOut({ scope: "local" })` で cookie だけ消して `/login` へ。
 - 認証の Server Actions は `src/app/auth/actions.ts`（`login` / `signUp` / `requestPasswordReset` / `resetPassword` / `logout`）。Supabase のエラーは `error.code`（`invalid_credentials`、`email_not_confirmed` など）で文言を出し分ける。
 - 確認メール・再設定メールのリンクは `src/app/auth/confirm/route.ts` で受ける。`token_hash` + `type`（`verifyOtp`）と `code`（`exchangeCodeForSession`。既定のメールテンプレートの場合で、同じブラウザでのみ有効）の両方に対応。戻り先 `next` は `safeNextPath()`（`src/lib/safeNextPath.ts`）でアプリ内のパスに限定する。失敗時は `/auth/error`。
-- Supabase ダッシュボード側の設定（コード管理外）: Site URL `http://localhost:3000`、Redirect URLs に `http://localhost:3000/auth/confirm`。本番にデプロイするときはそのドメインも追加する。
+- Supabase ダッシュボード側の設定（コード管理外）: Site URL は Vercel の公開 URL、Redirect URLs は `http://localhost:3000/**` と `https://<公開 URL>/**`。`?next=...` が付いても許可されるよう `/**` で登録する。許可されない戻り先を渡すと Site URL にフォールバックするため、Site URL を Supabase の URL にすると確認リンクが `{"error":"requested path is invalid"}` になる。
 - パスワードの条件（英小文字・英大文字・数字・記号をすべて含む 8 文字以上）は `validatePassword()` とダッシュボードのパスワードポリシーの両方で設定している。ログイン時は形式を確認しない。
 
 ### データベース
