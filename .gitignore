@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright MCP の画面確認で出力されるスクリーンショット・ログ
+/.playwright-mcp/
