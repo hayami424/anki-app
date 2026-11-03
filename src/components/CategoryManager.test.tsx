@@ -94,10 +94,10 @@ describe("CategoryManager", () => {
     expect(screen.getByLabelText("カテゴリー名")).toHaveValue("日本史");
   });
 
-  test("「戻る」で問題一覧へ遷移するリンクを表示する", () => {
+  test("「問題一覧」で問題一覧へ遷移するリンクを表示する", () => {
     renderManager();
 
-    expect(screen.getByRole("link", { name: "戻る" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "問題一覧" })).toHaveAttribute("href", "/");
   });
 });
 

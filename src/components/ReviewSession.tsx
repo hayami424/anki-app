@@ -8,13 +8,14 @@ import {
   CircleX,
   Inbox,
   PartyPopper,
+  Pencil,
   Play,
   Send,
   Sparkles,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition, type FormEvent } from "react";
+import { useState, useSyncExternalStore, useTransition, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -24,6 +25,14 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewModeForm } from "@/components/ReviewModeForm";
 import type { ReviewSelection } from "@/lib/review/mode";
+import {
+  parseSavedProgress,
+  progressStorageKey,
+  restoreProgress,
+  type RestoredProgress,
+  type SavedProgress,
+} from "@/lib/review/progress";
+import { editFromReviewHref } from "@/lib/returnTo";
 import { cn } from "@/lib/utils";
 import type { Category, ReviewQuestion } from "@/lib/types";
 
@@ -38,6 +47,8 @@ type Props = {
   selection?: ReviewSelection;
   // 「カテゴリー別」で選べるカテゴリー
   categories?: Category[];
+  // 問題修正画面から戻ってきたときの、修正した問題の ID。この問題から再開する
+  resumeQuestionId?: string;
 };
 
 type Judgement = { userAnswer: string; isCorrect: boolean; correctAnswer: string };
@@ -67,17 +78,70 @@ function emptyMessage(selection: ReviewSelection): { title: string; description:
   }
 }
 
-export function ReviewSession({
-  questions,
+// 保存した進み具合は sessionStorage にあり、サーバーでは読めない。
+// useSyncExternalStore でサーバーとハイドレーション時は null、その後にブラウザの値を読む
+function subscribeNothing() {
+  return () => {};
+}
+
+function readSavedProgress(): string | null {
+  try {
+    return window.sessionStorage.getItem(progressStorageKey);
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedProgress(progress: SavedProgress) {
+  try {
+    window.sessionStorage.setItem(progressStorageKey, JSON.stringify(progress));
+  } catch {
+    // 保存できない環境では、戻ったときに修正した問題を先頭にして最初から出題する
+  }
+}
+
+export function ReviewSession(props: Props) {
+  const { questions, selection = { mode: "today" }, resumeQuestionId } = props;
+  const savedText = useSyncExternalStore(
+    subscribeNothing,
+    () => (resumeQuestionId === undefined ? null : readSavedProgress()),
+    () => null,
+  );
+  const initial =
+    resumeQuestionId === undefined
+      ? null
+      : restoreProgress(
+          parseSavedProgress(savedText),
+          JSON.stringify(selection),
+          questions,
+          resumeQuestionId,
+        );
+
+  // ブラウザに保存した進み具合を読めたら作り直して、その状態から始める
+  return (
+    <ReviewSessionView
+      key={savedText === null ? "initial" : "restored"}
+      {...props}
+      selection={selection}
+      initial={initial}
+    />
+  );
+}
+
+function ReviewSessionView({
+  questions: questionsProp,
   submitAnswerAction,
   selection = { mode: "today" },
   categories = [],
-}: Props) {
-  const [started, setStarted] = useState(false);
-  const [index, setIndex] = useState(0);
+  initial,
+}: Props & { initial: RestoredProgress | null }) {
+  // 問題修正から戻ってきたときは、修正した問題から出題を再開する
+  const questions = initial?.questions ?? questionsProp;
+  const [started, setStarted] = useState(initial !== null);
+  const [index, setIndex] = useState(initial?.index ?? 0);
   const [answer, setAnswer] = useState("");
   const [judgement, setJudgement] = useState<Judgement>();
-  const [correctCount, setCorrectCount] = useState(0);
+  const [correctCount, setCorrectCount] = useState(initial?.correctCount ?? 0);
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string>();
   const [isPending, startTransition] = useTransition();
@@ -228,8 +292,25 @@ export function ReviewSession({
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-wrap items-center justify-between gap-2">
           <Badge variant="outline">{current.categoryName}</Badge>
+          {/* 画面遷移図 ⑯: 復習中に問題を修正し、⑮ で同じ出題タイプの復習画面に戻る（出題は最初からになる） */}
+          <Link
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+            href={editFromReviewHref(current.id, selection)}
+            onClick={() =>
+              writeSavedProgress({
+                selectionKey: JSON.stringify(selection),
+                order: questions.map((question) => question.id),
+                index,
+                // 戻ったらこの問題をやり直すので、この問題の正解は数えない
+                correctCount: correctCount - (judgement?.isCorrect ? 1 : 0),
+              })
+            }
+          >
+            <Pencil />
+            問題修正
+          </Link>
         </CardHeader>
         <CardContent>
           <p className="py-4 text-xl leading-relaxed font-semibold whitespace-pre-wrap">

@@ -244,9 +244,10 @@ export function CategoryManager({
       </Card>
 
       <div>
+        {/* 画面遷移図 ⑳ のボタン名に合わせる */}
         <Link className={cn(buttonVariants({ variant: "outline" }))} href="/">
           <ArrowLeft />
-          戻る
+          問題一覧
         </Link>
       </div>
     </div>
