@@ -47,16 +47,20 @@ export async function updateProfile(
   }
 
   // ヘッダーなどの名前はアクセストークン（JWT）の user_metadata から読んでいる。
-  // updateUser ではトークンが作り直されないため、発行し直してから画面を再描画する
+  // updateUser ではトークンが作り直されないため、発行し直してから画面を移動・再描画する
   await supabase.auth.refreshSession();
+
+  // 画面遷移図 ⑤: 「保存」で問題一覧へ戻る
+  if (!emailChanged) redirect("/");
+
+  // メールアドレスを変えた場合は、確認メールの案内を読めるよう個人設定画面に残す
   refresh();
   return {
     // メールアドレスは確認リンクを開くまで変わらないため、変更前のものを表示する
     values: { name, email: currentEmail },
-    notice: emailChanged
-      ? // Supabase の既定（Secure email change）では新旧両方のアドレスに確認メールが届く
-        "保存しました。確認メールを送信したので、メール内のリンクを開くとメールアドレスの変更が完了します"
-      : "保存しました",
+    // Supabase の既定（Secure email change）では新旧両方のアドレスに確認メールが届く
+    notice:
+      "保存しました。確認メールを送信したので、メール内のリンクを開くとメールアドレスの変更が完了します",
   };
 }
 

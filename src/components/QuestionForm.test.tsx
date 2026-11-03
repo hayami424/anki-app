@@ -126,3 +126,63 @@ describe("QuestionForm", () => {
     expect(screen.getByRole("button", { name: "作成" })).toBeDisabled();
   });
 });
+
+// Cache Components では一度開いた画面が <Activity> で残り、もう一度開くと同じフォームに新しい初期値が届く
+describe("QuestionForm を開き直したとき", () => {
+  const before = { categoryId: "history", question: "江戸幕府を開いたのは？", answer: "家康", url: "" };
+  const after = { ...before, categoryId: "english", answer: "徳川家康" };
+
+  function renderEditForm(initialValues: typeof before) {
+    const action = vi.fn<
+      (prev: QuestionFormState, formData: FormData) => Promise<QuestionFormState>
+    >(async () => ({}));
+    return render(
+      <QuestionForm
+        categories={categories}
+        action={action}
+        initialValues={initialValues}
+        submitLabel="修正"
+        cancelHref="/"
+      />,
+    );
+  }
+
+  test("サーバーから届く初期値が変わったら、残っていた入力ではなく新しい値を表示する", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderEditForm(before);
+    await user.clear(screen.getByLabelText("解答"));
+    await user.type(screen.getByLabelText("解答"), "書きかけ");
+
+    rerender(
+      <QuestionForm
+        categories={categories}
+        action={vi.fn(async () => ({}))}
+        initialValues={after}
+        submitLabel="修正"
+        cancelHref="/"
+      />,
+    );
+
+    expect(screen.getByLabelText("解答")).toHaveValue("徳川家康");
+    expect(screen.getByLabelText("カテゴリー")).toHaveValue("english");
+  });
+
+  test("初期値が変わっていなければ、書きかけの入力を残す", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderEditForm(before);
+    await user.clear(screen.getByLabelText("解答"));
+    await user.type(screen.getByLabelText("解答"), "書きかけ");
+
+    rerender(
+      <QuestionForm
+        categories={categories}
+        action={vi.fn(async () => ({}))}
+        initialValues={{ ...before }}
+        submitLabel="修正"
+        cancelHref="/"
+      />,
+    );
+
+    expect(screen.getByLabelText("解答")).toHaveValue("書きかけ");
+  });
+});

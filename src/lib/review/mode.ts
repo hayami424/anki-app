@@ -27,6 +27,16 @@ export function parseReviewSelection(searchParams: {
   return { mode: "today" };
 }
 
+// 出題タイプを保ったまま復習画面に戻るための URL の検索パラメーター（先頭の ? は含まない）
+export function reviewSearchParams(selection: ReviewSelection): string {
+  const params = new URLSearchParams();
+  if (selection.mode !== "today") params.set("mode", selection.mode);
+  if (selection.mode === "category" && selection.categoryId !== null) {
+    params.set("categoryId", selection.categoryId);
+  }
+  return params.toString();
+}
+
 // 解答時に復習フェーズ・出題日を進めるか。mode はクライアントから届く値なので文字列として受け取る。
 // 「今日の問題」でも、出題日を迎えていない問題（二重送信など）は進めない
 export function shouldUpdateSchedule(

@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import type { QuestionFormState } from "@/components/QuestionForm";
 import { requireUser } from "@/lib/auth";
+import { returnPath } from "@/lib/returnTo";
 import { validateQuestionInput, type QuestionInput } from "@/lib/validation";
 
 function saveFailed(input: QuestionInput): QuestionFormState {
@@ -31,9 +32,11 @@ export async function createQuestion(
   redirect("/");
 }
 
+// returnParams は修正画面の URL の from / mode / categoryId。.bind で渡すため書き換えられるが、
+// 戻り先のパスは returnPath() がアプリ内の決まった画面だけから組み立てる
 export async function updateQuestion(
   id: string,
-  returnToDetail: boolean,
+  returnParams: Record<string, string | string[] | undefined>,
   _prevState: QuestionFormState,
   formData: FormData,
 ): Promise<QuestionFormState> {
@@ -51,7 +54,7 @@ export async function updateQuestion(
     })
     .eq("id", id);
   if (error) return saveFailed(result.value);
-  redirect(returnToDetail ? `/questions/${id}` : "/");
+  redirect(returnPath(id, returnParams));
 }
 
 export async function deleteQuestion(id: string): Promise<{ error?: string }> {

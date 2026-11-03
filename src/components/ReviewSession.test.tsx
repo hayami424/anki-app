@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReviewQuestion } from "@/lib/types";
@@ -256,5 +256,135 @@ describe("ReviewSession 出題タイプの選択", () => {
     await answer(user, "徳川家康");
 
     expect(submitAnswerAction).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ReviewSession 問題修正への遷移", () => {
+  test("出題中は「問題修正」で表示中の問題の修正画面へ移動するリンクを表示する", async () => {
+    const user = userEvent.setup();
+    renderSession();
+    await startReview(user);
+
+    expect(screen.getByRole("link", { name: "問題修正" })).toHaveAttribute(
+      "href",
+      "/questions/q1/edit?from=review",
+    );
+  });
+
+  test("解答後も「問題修正」のリンクを表示する", async () => {
+    const user = userEvent.setup();
+    renderSession();
+    await startReview(user);
+    await answer(user, "家康");
+
+    expect(screen.getByText("× 不正解")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "問題修正" })).toBeInTheDocument();
+  });
+
+  test("「問題修正」のリンクは出題タイプを引き継ぐ", async () => {
+    const user = userEvent.setup();
+    renderSession({ selection: { mode: "category", categoryId: "history" } });
+    await startReview(user);
+
+    expect(screen.getByRole("link", { name: "問題修正" })).toHaveAttribute(
+      "href",
+      "/questions/q1/edit?mode=category&categoryId=history&from=review",
+    );
+  });
+
+  test("次の問題に進むとリンク先も次の問題になる", async () => {
+    const user = userEvent.setup();
+    renderSession();
+    await startReview(user);
+    await answer(user, "徳川家康");
+    await user.click(screen.getByRole("button", { name: "次の問題へ" }));
+
+    expect(screen.getByRole("link", { name: "問題修正" })).toHaveAttribute(
+      "href",
+      "/questions/q2/edit?from=review",
+    );
+  });
+});
+
+describe("ReviewSession 問題修正から戻ったときの再開", () => {
+  const storageKey = "anki-app:review-progress";
+
+  afterEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  test("保存した進み具合があれば、修正した問題から出題を再開する", () => {
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        selectionKey: JSON.stringify({ mode: "all" }),
+        order: ["q1", "q2"],
+        index: 1,
+        correctCount: 1,
+      }),
+    );
+    renderSession({ selection: { mode: "all" }, resumeQuestionId: "q2" });
+
+    expect(screen.getByText("2 / 2 問目")).toBeInTheDocument();
+    expect(screen.getByText("apple の意味は？")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "復習スタート" })).not.toBeInTheDocument();
+  });
+
+  test("再開後に最後まで解答すると、保存していた正解数に足して結果を表示する", async () => {
+    const user = userEvent.setup();
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        selectionKey: JSON.stringify({ mode: "all" }),
+        order: ["q1", "q2"],
+        index: 1,
+        correctCount: 1,
+      }),
+    );
+    renderSession({ selection: { mode: "all" }, resumeQuestionId: "q2" });
+
+    await answer(user, "りんご");
+    await user.click(screen.getByRole("button", { name: "結果を見る" }));
+
+    expect(screen.getByText("2 問中 2 問正解")).toBeInTheDocument();
+  });
+
+  test("保存した進み具合がなければ、修正した問題を 1 問目にして出題を始める", () => {
+    renderSession({ resumeQuestionId: "q2" });
+
+    expect(screen.getByText("1 / 2 問目")).toBeInTheDocument();
+    expect(screen.getByText("apple の意味は？")).toBeInTheDocument();
+  });
+
+  test("出題タイプが違う進み具合は使わない", () => {
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        selectionKey: JSON.stringify({ mode: "all" }),
+        order: ["q1", "q2"],
+        index: 1,
+        correctCount: 1,
+      }),
+    );
+    renderSession({ resumeQuestionId: "q2" });
+
+    expect(screen.getByText("1 / 2 問目")).toBeInTheDocument();
+  });
+
+  test("「問題修正」を押すと、出題順・位置・その問題より前の正解数を保存する", async () => {
+    const user = userEvent.setup();
+    renderSession({ selection: { mode: "all" } });
+    await startReview(user);
+    await answer(user, "徳川家康");
+
+    await user.click(screen.getByRole("link", { name: "問題修正" }));
+
+    expect(JSON.parse(window.sessionStorage.getItem(storageKey) ?? "null")).toEqual({
+      selectionKey: JSON.stringify({ mode: "all" }),
+      order: ["q1", "q2"],
+      index: 0,
+      // 1 問目は正解したが、戻ったらやり直すので数えない
+      correctCount: 0,
+    });
   });
 });

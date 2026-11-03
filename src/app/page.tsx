@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { LoadingCard } from "@/components/LoadingCard";
 import { PageHeader } from "@/components/PageHeader";
 import { QuestionList } from "@/components/QuestionList";
+import { ResetOnNavigation } from "@/components/ResetOnNavigation";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getCategories, getQuestions } from "@/lib/data/questions";
@@ -43,9 +44,12 @@ export default function Home() {
           </nav>
         }
       />
-      <Suspense fallback={<LoadingCard />}>
-        <QuestionListLoader />
-      </Suspense>
+      {/* 一度開いた一覧にもう一度来たとき、変更前の内容ではなく読み込み表示から始める */}
+      <ResetOnNavigation>
+        <Suspense fallback={<LoadingCard />}>
+          <QuestionListLoader />
+        </Suspense>
+      </ResetOnNavigation>
     </main>
   );
 }

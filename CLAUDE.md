@@ -57,7 +57,7 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 - `src/proxy.ts`（旧 middleware）→ `src/lib/supabase/proxy.ts` の `updateSession()` がアクセストークンを更新し、未ログインなら `/login` へ、ログイン済みで `/login`・`/signup`・`/forgot-password` に来たら `/` へリダイレクトする。ログインなしで開ける画面を増やすときは `publicPaths` に追加する。`createServerClient` と `getClaims()` の間に処理を挟まないこと。
 - Server Action は先頭で `@/lib/auth` の `requireUser()` を呼ぶ（未ログインなら `/login` へ。`{ supabase, userId, claims }` を返す。`claims.email` や `claims.user_metadata.display_name` で現在のメールアドレス・名前が分かる）。データは RLS で本人のものに絞られる。
 - メールのリンクの戻り先は `@/lib/auth` の `confirmUrl(next)` で組み立てる。`"use server"` のファイルで async 関数を export するとクライアントから呼べる Server Action になるため、補助関数は `actions.ts` に置かない。
-- 個人設定（`/settings`、`src/app/settings/actions.ts`）: 名前は `updateUser({ data: { display_name } })`、メールアドレスは確認メール経由で変更（既定の Secure email change では新旧両方に届き、リンクを開くまで変わらない）、パスワードは空なら変更しない。変更前のメールアドレスはクライアントから受け取らずセッションから取る。名前は JWT の `user_metadata` から表示しているため、`updateUser` の後に `refreshSession()` でトークンを発行し直す（しないとヘッダーの名前が再ログインまで古いまま）。
+- 個人設定（`/settings`、`src/app/settings/actions.ts`）: 名前は `updateUser({ data: { display_name } })`、メールアドレスは確認メール経由で変更（既定の Secure email change では新旧両方に届き、リンクを開くまで変わらない）、パスワードは空なら変更しない。変更前のメールアドレスはクライアントから受け取らずセッションから取る。名前は JWT の `user_metadata` から表示しているため、`updateUser` の後に `refreshSession()` でトークンを発行し直す（しないとヘッダーの名前が再ログインまで古いまま）。保存後は問題一覧へ移動する（画面遷移図 ⑤）。メールアドレスを変えたときだけ、確認メールの案内を出すため個人設定画面に残る。
 - アカウント削除は RPC `public.delete_own_account()`（`security definer`、`auth.uid()` 本人の `auth.users` を削除し、FK の cascade で問題・カテゴリーも消える）。secret キーをアプリに持たせないためこの方式にしている。`get_advisors` の `authenticated_security_definer_function_executable` 警告はこの関数のもので想定どおり。削除後は `signOut({ scope: "local" })` で cookie だけ消して `/login` へ。
 - 認証の Server Actions は `src/app/auth/actions.ts`（`login` / `signUp` / `requestPasswordReset` / `resetPassword` / `logout`）。Supabase のエラーは `error.code`（`invalid_credentials`、`email_not_confirmed` など）で文言を出し分ける。
 - 確認メール・再設定メールのリンクは `src/app/auth/confirm/route.ts` で受ける。`token_hash` + `type`（`verifyOtp`）と `code`（`exchangeCodeForSession`。既定のメールテンプレートの場合で、同じブラウザでのみ有効）の両方に対応。戻り先 `next` は `safeNextPath()`（`src/lib/safeNextPath.ts`）でアプリ内のパスに限定する。失敗時は `/auth/error`。
@@ -83,7 +83,7 @@ npx vitest run -t "見出し"              # テスト名で絞り込み
 ```
 src/app/                 ページ（App Router）と Server Actions（各ディレクトリの actions.ts）
   page.tsx               問題一覧 /
-  questions/new|[id]|[id]/edit   問題作成・詳細・修正（修正画面は ?from=detail で戻り先を切り替え）
+  questions/new|[id]|[id]/edit   問題作成・詳細・修正（修正画面は ?from=detail|review で戻り先を切り替え。review なら mode / categoryId も引き継ぎ、?resume=問題ID 付きで戻る）
   categories/            カテゴリー一覧・登録・修正（行内で編集）・削除（チェックしてまとめて削除）
   review/                復習（?mode=today|all|category&categoryId=... で出題タイプを切り替え）
   login|signup|forgot-password|reset-password   認証の画面（幅は max-w-md）
@@ -96,6 +96,7 @@ src/components/ui/       shadcn/ui の部品（CLI で生成）
 src/lib/utils.ts         cn()（shadcn/ui 用のクラス名結合）
 src/lib/data/questions.ts   Supabase からの取得（DB の行 → アプリの型への変換もここ）
 src/lib/review/          出題日計算（schedule）・正誤判定（judge）・シャッフル（shuffle）・出題タイプ（mode）。純粋関数
+src/lib/returnTo.ts      問題修正画面の戻り先（returnPath）と、復習画面からのリンク（editFromReviewHref）。純粋関数
 src/lib/validation.ts    フォーム入力の検証（FormData を受け取る純粋関数）
 src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQuestion など）
 ```
@@ -103,7 +104,14 @@ src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQu
 - **ページの形**: `page.tsx` は同期コンポーネントにして見出しなどの静的部分を描画し、データ取得は `async` な `〜Loader` コンポーネントに分けて `<Suspense>` で包む（Cache Components では未キャッシュのデータ取得を Suspense の外で行うとエラーになる）。`params` / `searchParams` も Promise なので Loader 内で `await` する。
 - `new Date()` や `Math.random()` をサーバーで使う前には `await connection()`（`next/server`）を呼ぶ（例: `src/app/review/page.tsx`）。
 - **Server Actions** はページから Client Component に props で渡す（テストで差し替えるため）。フォームは `useActionState` を使い、エラー時は `{ errors, values }` を返して入力値を復元する（フォームの `key` に state を渡して作り直している）。成功時は `redirect()`、同じ画面のまま再表示したいときは `refresh()`（`next/cache`）。データはキャッシュしていないので `revalidatePath` などは不要。
-- 引数を `.bind` で Server Action に渡すとクライアントから改ざんできるため、URL などをそのまま受け取らない（例: `updateQuestion` は戻り先を boolean で受け取り、パスはサーバーで組み立てる）。
+- **Cache Components では、一度開いた画面は unmount されず React の `<Activity>` で隠したまま残る**（最大 3 画面。state も入力欄の DOM も保持される。`node_modules/next/dist/docs/01-app/02-guides/preserving-ui-state.md`）。同じパスにリンクや `redirect()` で移動すると（検索パラメーターだけが違っても）、**残っていた画面を前回の内容・状態のまま表示し、新しいデータが届いてから差し替える**。そのため、データを表示する画面は次のようにしている。
+  - **ページの `<Suspense>` を `ResetOnNavigation`（`src/components/ResetOnNavigation.tsx`）で包む**。`useRouter().bfcacheId` を `key` にして、リンク・`redirect()` での移動では作り直し（読み込み表示 → 新しいデータ）、ブラウザの戻る・進むでは状態を残す。**必ず `<Suspense>` の外側に置く**（内側だと新しいデータが届くまで前回の内容が見える）。新しいページを作るときも同じ形にする。
+  - サーバーから受け取った値を `defaultValue` で入れるフォームは、`key` に初期値も含める（`key={JSON.stringify([state, initialValues])}`。例: `QuestionForm`、`SettingsForm`）。表示中にデータが更新されたときも新しい値に作り直すため。
+  - URL に更新日時などを付けて別の画面にする方法や、`revalidatePath` では直らなかった（検索パラメーターだけの違いでは同じ画面として再利用され、`revalidatePath` は残った画面の表示を消さない）。
+  - `ResetOnNavigation` を含むページを Vitest で描画するときは、ルーターがないので `vi.mock("next/navigation", () => ({ useRouter: () => ({ bfcacheId: "test" }) }))` で差し替える（例: `src/app/page.test.tsx`）。
+  - Playwright で確認するときは、隠れた画面も DOM に残っているので `:visible` や `getByRole` で表示中の要素に絞る。
+- 引数を `.bind` で Server Action に渡すとクライアントから改ざんできるため、URL などをそのまま受け取らない（例: `updateQuestion` は修正画面の `from` / `mode` / `categoryId` を受け取り、戻り先のパスは `returnPath()` が一覧・詳細・復習のどれかとして組み立てる）。
+- 画面遷移とボタン名は要件定義書の画面遷移図（docx 内の画像。①〜⑳）に合わせている。主な対応: ⑤ 個人設定「保存」→ 一覧、⑯ 復習「問題修正」→ 問題修正、⑮ 問題修正「戻る」→ 復習、⑰ 詳細「問題修正」→ 問題修正、⑱ 問題修正「戻る」→ 詳細、⑳ カテゴリー一覧「問題一覧」→ 一覧。② 新規登録「登録」→ 一覧 だけは、メール確認を必須にしたため確認メールのリンク経由になる。
 - 削除の確認は `window.confirm` を使う。
 
 ### 出題日の計算（`src/lib/review/schedule.ts`）
@@ -121,6 +129,10 @@ src/lib/types.ts         アプリ内で使う型（Question, Category, ReviewQu
 - 「今日の問題」（`today`）・「全問復習」（`all`、全問題をランダム）・「カテゴリー別」（`category`、選んだカテゴリーの問題をランダム）。URL の検索パラメーター `mode` / `categoryId` で切り替え、`parseReviewSelection()` で読み取る（不明な値は `today`）。
 - 復習画面の開始前と 0 件のときに `ReviewModeForm`（`next/form` の GET フォーム）を表示する。`ReviewSession` は `selection` を省略すると「今日の問題」として動く。ページは出題タイプごとに `key` を変えて、進み具合を最初からにしている。
 - **復習フェーズ・出題日を更新するのは「今日の問題」だけ**。全問復習・カテゴリー別は練習として正誤判定のみ。判定は `shouldUpdateSchedule(mode, question, today)`（`mode === "today"` かつ出題日を迎えている問題）。
+- 復習中の「問題修正」（画面遷移図 ⑯）→ 修正画面の「戻る」「修正」（⑮）で、**修正した問題から再開する**（`src/lib/review/progress.ts`）。
+  - 「問題修正」を押した時点で出題順・位置・その問題より前の正解数を `sessionStorage`（キー `anki-app:review-progress`）に保存する。解答済みでも、その問題はやり直すので正解数に数えない。
+  - 戻り先は `/review?...&resume=問題ID`。ページは `resume` の問題を出題に必ず含める（「今日の問題」で解答済みなら出題日が進んで一覧から外れているため。出題日を迎えていないので、やり直してもスケジュールは進まない）。
+  - `ReviewSession` は保存した進み具合を `useSyncExternalStore` で読み（サーバーとハイドレーション時は null）、読めたら `key` を変えて `ReviewSessionView` を作り直す（effect 内の setState は lint の `react-hooks/set-state-in-effect` で禁止されているため）。進み具合が使えないときは修正した問題を 1 問目にして始める。
 - `submitAnswer(mode, id, answer)` の `mode` はページで `.bind` して渡すため、クライアントから書き換えられる。それでも出題日を迎えていない問題は進まないので、「今日の問題」で正当に解答した場合と結果は変わらない。
 
 ## テスト
