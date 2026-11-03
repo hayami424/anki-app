@@ -8,6 +8,11 @@ vi.mock("@/lib/data/questions", () => ({
   getCategories: () => new Promise(() => {}),
 }));
 
+// ResetOnNavigation が使う Next.js のルーターはテスト環境にないため差し替える
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ bfcacheId: "test" }),
+}));
+
 test("トップページに見出しが表示される", () => {
   render(<Home />);
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(

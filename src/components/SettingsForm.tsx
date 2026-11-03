@@ -64,8 +64,10 @@ export function SettingsForm({ initialValues, updateProfileAction, deleteAccount
   return (
     <div className="flex flex-col gap-6">
       {/* エラー後に入力値を復元するため、送信結果ごとにフォームを作り直す。
+          Cache Components では一度開いた画面が <Activity> で入力欄ごと残るため、
+          サーバーから届く初期値が変わったとき（保存して戻ってきたときなど）も作り直して新しい値を表示する。
           ブラウザの検証メッセージではなくアプリの文言で案内するため noValidate にする */}
-      <form key={JSON.stringify(state)} action={formAction} noValidate>
+      <form key={JSON.stringify([state, initialValues])} action={formAction} noValidate>
         <Card>
           <CardContent>
             <FieldGroup>

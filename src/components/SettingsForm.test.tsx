@@ -123,3 +123,22 @@ describe("SettingsForm", () => {
     expect(screen.getByRole("link", { name: "戻る" })).toHaveAttribute("href", "/");
   });
 });
+
+describe("SettingsForm を開き直したとき", () => {
+  test("サーバーから届く名前が変わったら、新しい名前を表示する", async () => {
+    const user = userEvent.setup();
+    const props = {
+      updateProfileAction: vi.fn(async () => ({})),
+      deleteAccountAction: vi.fn(async () => ({})),
+    };
+    const { rerender } = render(<SettingsForm initialValues={initialValues} {...props} />);
+    await user.clear(screen.getByLabelText("名前"));
+    await user.type(screen.getByLabelText("名前"), "書きかけ");
+
+    rerender(
+      <SettingsForm initialValues={{ ...initialValues, name: "山田花子" }} {...props} />,
+    );
+
+    expect(screen.getByLabelText("名前")).toHaveValue("山田花子");
+  });
+});

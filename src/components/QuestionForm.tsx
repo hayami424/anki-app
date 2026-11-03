@@ -48,8 +48,10 @@ export function QuestionForm({
   const hasCategories = categories.length > 0;
 
   return (
-    // エラー後に入力値を復元するため、送信結果ごとにフォームを作り直す
-    <form key={JSON.stringify(state)} action={formAction}>
+    // エラー後に入力値を復元するため、送信結果ごとにフォームを作り直す。
+    // Cache Components では一度開いた画面が <Activity> で入力欄ごと残るため、
+    // サーバーから届く初期値が変わったとき（別の画面で修正した後など）も作り直して新しい値を表示する
+    <form key={JSON.stringify([state, initialValues])} action={formAction}>
       <Card>
         <CardContent>
           <FieldGroup>
